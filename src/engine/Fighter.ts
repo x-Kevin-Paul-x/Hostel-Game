@@ -8,6 +8,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     public maxHp: number = 100;
     public isPlayer1: boolean;
     public currentState: FighterState = 'IDLE';
+    public lastAttackType: 'punch' | 'kick' | 'jab' | null = null;
 
     public attackBox: Phaser.GameObjects.Rectangle;
     private moveSpeed: number = 160;
@@ -63,21 +64,51 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
                 this.setFlipX(true);
                 if (this.body?.touching.down) {
                     this.currentState = 'WALK';
-                    this.play('Kevin_walk', true);
+                    // Play character-specific walk animation if available
+                    try {
+                        const texKey = (this.texture as Phaser.Textures.Texture).key;
+                        const charName = texKey.split('_')[0];
+                        const animKey = `${charName}_walk`;
+                        if (this.anims && this.anims.animationManager.exists(animKey)) {
+                            this.play(animKey, true);
+                        }
+                    } catch (e) {
+                        // ignore
+                    }
                 }
             } else if (input.right) {
                 this.setVelocityX(this.moveSpeed);
                 this.setFlipX(false);
                 if (this.body?.touching.down) {
                     this.currentState = 'WALK';
-                    this.play('Kevin_walk', true);
+                    try {
+                        const texKey = (this.texture as Phaser.Textures.Texture).key;
+                        const charName = texKey.split('_')[0];
+                        const animKey = `${charName}_walk`;
+                        if (this.anims && this.anims.animationManager.exists(animKey)) {
+                            this.play(animKey, true);
+                        }
+                    } catch (e) { }
                 }
             } else {
                 this.setVelocityX(0);
                 if (this.body?.touching.down) {
                     this.currentState = 'IDLE';
-                    this.stop();
-                    this.setTexture('Kevin_idle');
+                    // Try to play idle animation, else fall back to static idle texture
+                    try {
+                        const texKey = (this.texture as Phaser.Textures.Texture).key;
+                        const charName = texKey.split('_')[0];
+                        const animKey = `${charName}_idle`;
+                        if (this.anims && this.anims.animationManager.exists(animKey)) {
+                            this.play(animKey, true);
+                        } else if (this.scene.textures.exists(`${charName}_idle`)) {
+                            this.setTexture(`${charName}_idle`);
+                        } else if (this.scene.textures.exists(`${charName}_idle_0`)) {
+                            this.setTexture(`${charName}_idle_0`);
+                        }
+                    } catch (e) {
+                        // ignore
+                    }
                 }
             }
 
@@ -89,26 +120,59 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
         }
 
         // Attacks
-        if (input.punch && this.currentState !== 'ATTACK') {
+        if (input.jab && this.currentState !== 'ATTACK') {
+            this.performAttack('jab');
+        } else if (input.punch && this.currentState !== 'ATTACK') {
             this.performAttack('punch');
         } else if (input.kick && this.currentState !== 'ATTACK') {
             this.performAttack('kick');
         }
     }
-
-    performAttack(type: 'punch' | 'kick') {
+    performAttack(type: 'punch' | 'kick' | 'jab') {
         this.currentState = 'ATTACK';
         this.setVelocityX(0); // Stop moving when attacking
+        this.lastAttackType = type;
 
-        // Enable hitbox after a short delay (startup frames)
-        this.scene.time.delayedCall(100, () => {
+        // Play attack animation if present
+        try {
+            const texKey = (this.texture as Phaser.Textures.Texture).key;
+            const charName = texKey.split('_')[0];
+            const animKey = `${charName}_${type}`;
+            if (this.anims && this.anims.animationManager.exists(animKey)) {
+                this.play(animKey, true);
+            }
+        } catch (e) {
+            // ignore if texture key not parsable
+        }
+
+        // Timings differ by attack type (startup, active window, recovery)
+        let startup = 100;
+        let activeWindow = 200;
+        let recovery = 400;
+        if (type === 'jab') {
+            startup = 60;
+            activeWindow = 140;
+            recovery = 300;
+        } else if (type === 'kick') {
+            startup = 140;
+            activeWindow = 260;
+            recovery = 500;
+        }
+
+        // Enable hitbox after startup frames
+        this.scene.time.delayedCall(startup, () => {
             if (this.currentState === 'ATTACK' && this.attackBox.body) {
                 (this.attackBox.body as Phaser.Physics.Arcade.Body).enable = true;
             }
         });
 
-        // Reset state after animation complete
-        this.scene.time.delayedCall(400, () => {
+        // Disable hitbox after active window (to avoid long multi-hit windows)
+        this.scene.time.delayedCall(startup + activeWindow, () => {
+            if (this.attackBox.body) (this.attackBox.body as Phaser.Physics.Arcade.Body).enable = false;
+        });
+
+        // Reset state after full recovery
+        this.scene.time.delayedCall(recovery, () => {
             if (this.currentState === 'ATTACK') {
                 this.currentState = 'IDLE';
                 if (this.attackBox.body) (this.attackBox.body as Phaser.Physics.Arcade.Body).enable = false;

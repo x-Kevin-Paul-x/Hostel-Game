@@ -33,7 +33,11 @@ export class CombatSystem {
         if (defender.currentState === 'KO' || defender.currentState === 'STUNNED') return;
 
         // Damage
-        defender.takeDamage(10);
+        let damage = 10;
+        if (attacker.lastAttackType === 'jab') damage = 6;
+        else if (attacker.lastAttackType === 'kick') damage = 14;
+        else damage = 10; // punch or default
+        defender.takeDamage(damage);
 
         // Knockback
         const direction = attacker.x < defender.x ? 1 : -1;

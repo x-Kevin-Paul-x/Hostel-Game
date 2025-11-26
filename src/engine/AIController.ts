@@ -8,7 +8,7 @@ export class AIController {
     private nextActionTime: number = 0;
     private currentInput: InputMap;
 
-    constructor(scene: Phaser.Scene, me: Fighter, target: Fighter) {
+    constructor(me: Fighter, target: Fighter) {
         this.me = me;
         this.target = target;
         this.currentInput = this.getEmptyInput();
@@ -23,7 +23,6 @@ export class AIController {
         this.currentInput = this.getEmptyInput();
 
         const distance = Phaser.Math.Distance.Between(this.me.x, this.me.y, this.target.x, this.target.y);
-        const isFacingTarget = (this.me.x < this.target.x && !this.me.flipX) || (this.me.x > this.target.x && this.me.flipX);
 
         // AI Logic
         if (distance > 100) {
@@ -34,9 +33,12 @@ export class AIController {
                 this.currentInput.left = true;
             }
         } else if (distance < 60) {
-            // Attack Range
-            if (Math.random() > 0.3) {
+            // Attack Range - choose between punch, jab, kick
+            const r = Math.random();
+            if (r > 0.7) {
                 this.currentInput.punch = true;
+            } else if (r > 0.45) {
+                this.currentInput.jab = true;
             } else {
                 this.currentInput.kick = true;
             }
@@ -66,6 +68,6 @@ export class AIController {
     }
 
     private getEmptyInput(): InputMap {
-        return { left: false, right: false, up: false, down: false, jump: false, punch: false, kick: false };
+        return { left: false, right: false, up: false, down: false, jump: false, punch: false, jab: false, kick: false };
     }
 }

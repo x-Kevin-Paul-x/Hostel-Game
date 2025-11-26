@@ -2,8 +2,6 @@ import Phaser from 'phaser';
 
 export class HealthBar {
     private scene: Phaser.Scene;
-    private x: number;
-    private y: number;
     private width: number;
     private height: number;
     private isLeft: boolean;
@@ -20,8 +18,7 @@ export class HealthBar {
 
     constructor(scene: Phaser.Scene, x: number, y: number, width: number, height: number, maxValue: number, isLeft: boolean = true) {
         this.scene = scene;
-        this.x = x;
-        this.y = y;
+        // x/y are used only to position the container on creation; no need to keep them as fields
         this.width = width;
         this.height = height;
         this.maxValue = maxValue;
@@ -101,7 +98,6 @@ export class HealthBar {
 
     private drawDamageBar() {
         this.damageBar.clear();
-        const originX = this.isLeft ? 0 : -this.width;
 
         // Damage bar (white/red behind health)
         // It should be from current health to previous health (currentValue)

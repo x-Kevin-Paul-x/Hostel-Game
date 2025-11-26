@@ -14,11 +14,18 @@ export class BootScene extends Phaser.Scene {
     create() {
         const manifest = this.cache.json.get('character-manifest');
         if (manifest && manifest.characters) {
+            // expose manifest to other scenes via registry so they can read per-character settings
+            this.registry.set('character-manifest', manifest);
             manifest.characters.forEach((char: any) => {
                 console.log(`Loading character: ${char.name}`);
 
                 // Load Idle
-                if (char.idleFrame) {
+                // Load Idle (single image or frames)
+                if (char.idleFrames && char.idleFrames.length > 0) {
+                    char.idleFrames.forEach((frame: string, index: number) => {
+                        this.load.image(`${char.name}_idle_${index}`, frame);
+                    });
+                } else if (char.idleFrame) {
                     this.load.image(`${char.name}_idle`, char.idleFrame);
                 }
 
@@ -28,6 +35,13 @@ export class BootScene extends Phaser.Scene {
                         this.load.image(`${char.name}_walk_${index}`, frame);
                     });
                 }
+                
+                    // Load Jab Frames (if provided)
+                    if (char.jabFrames && char.jabFrames.length > 0) {
+                        char.jabFrames.forEach((frame: string, index: number) => {
+                            this.load.image(`${char.name}_jab_${index}`, frame);
+                        });
+                    }
             });
 
             this.load.start();

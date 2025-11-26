@@ -16,9 +16,8 @@ export class BattleScene extends Phaser.Scene {
     private p2HealthBar!: HealthBar;
     private timerText!: Phaser.GameObjects.Text;
     private roundTimer: number = 99;
-    private timerEvent!: Phaser.Time.TimerEvent;
 
-    private isVsAI: boolean = true; // Default to Vs AI for now
+    private isVsAI: boolean = false; // Default to local 2-player (AI off)
     private roundOver: boolean = false;
 
     constructor() {
@@ -38,25 +37,63 @@ export class BattleScene extends Phaser.Scene {
         // Visual Floor (TileSprite)
         // this.add.tileSprite(640, 700, 1280, 60, 'floor');
 
-        // Create Animations for Kevin (hardcoded for now, should be dynamic based on manifest)
-        const charName = 'Kevin';
+        // Create Animations dynamically from loaded texture keys and manifest settings
+        const defaultJabFrameRate = 72; // double the previous 36 -> faster jab by default
 
-        // Walk Animation
-        const walkFrames = [];
-        for (let i = 0; i < 49; i++) {
-            walkFrames.push({ key: `${charName}_walk_${i}` });
+        const manifest = this.registry.get('character-manifest') || null;
+
+        const makeAnim = (char: string, anim: string, frameRate = 24, repeat = -1) => {
+            const frames: any[] = [];
+            let i = 0;
+            while (this.textures.exists(`${char}_${anim}_${i}`)) {
+                frames.push({ key: `${char}_${anim}_${i}` });
+                i++;
+            }
+            if (frames.length > 0) {
+                this.anims.create({ key: `${char}_${anim}`, frames, frameRate, repeat });
+            }
+        };
+
+        // If we have a manifest, create animations per character and honor per-character jabFrameRate
+        if (manifest && manifest.characters) {
+            manifest.characters.forEach((char: any) => {
+                const name = char.name;
+                // Walk (if frames exist)
+                makeAnim(name, 'walk', 24, -1);
+
+                // Idle (if frames exist)
+                makeAnim(name, 'idle', 12, -1);
+
+                // Jab: use per-character jabFrameRate if provided, else default
+                const jabRate = char.jabFrameRate ? Number(char.jabFrameRate) : defaultJabFrameRate;
+                makeAnim(name, 'jab', jabRate, 0);
+            });
+        } else {
+            // Fallback for Kevin only (older project state)
+            const charName = 'Kevin';
+            makeAnim(charName, 'walk', 24, -1);
+            makeAnim(charName, 'idle', 12, -1);
+            makeAnim(charName, 'jab', defaultJabFrameRate, 0);
         }
 
-        this.anims.create({
-            key: `${charName}_walk`,
-            frames: walkFrames,
-            frameRate: 24,
-            repeat: -1
-        });
+        // Create Fighters (default character name fallback)
+        const charName = (manifest && manifest.characters && manifest.characters.length > 0) ? manifest.characters[0].name : 'Kevin';
 
-        // Create Fighters
-        this.p1 = new Fighter(this, 300, 300, `${charName}_idle`, true);
-        this.p2 = new Fighter(this, 980, 300, `${charName}_idle`, false);
+        // Determine initial texture key for idle: prefer first idle frame, then single idleFrame key
+        let initialTexture = `${charName}_idle`;
+        if (manifest && manifest.characters) {
+            const charEntry = manifest.characters.find((c: any) => c.name === charName);
+            if (charEntry) {
+                if (charEntry.idleFrames && charEntry.idleFrames.length > 0) {
+                    initialTexture = `${charName}_idle_0`;
+                } else if (charEntry.idleFrame) {
+                    initialTexture = `${charName}_idle`;
+                }
+            }
+        }
+
+        this.p1 = new Fighter(this, 300, 300, initialTexture, true);
+        this.p2 = new Fighter(this, 980, 300, initialTexture, false);
 
         this.p1.setScale(0.5);
         this.p2.setScale(0.5);
@@ -71,7 +108,7 @@ export class BattleScene extends Phaser.Scene {
         this.combatSystem = new CombatSystem(this, [this.p1, this.p2]);
 
         if (this.isVsAI) {
-            this.aiController = new AIController(this, this.p2, this.p1);
+            this.aiController = new AIController(this.p2, this.p1);
         }
 
         // UI
@@ -79,7 +116,7 @@ export class BattleScene extends Phaser.Scene {
 
         // Timer
         this.roundTimer = 99;
-        this.timerEvent = this.time.addEvent({
+        this.time.addEvent({
             delay: 1000,
             callback: () => {
                 if (this.roundOver) return;
