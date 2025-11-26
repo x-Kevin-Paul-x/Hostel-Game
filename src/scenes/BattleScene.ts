@@ -53,6 +53,19 @@ export class BattleScene extends Phaser.Scene {
                 this.anims.create({ key: `${char}_${anim}`, frames, frameRate, repeat });
             }
         };
+        
+        // Create animation from specific frame range
+        const makeAnimFromRange = (char: string, anim: string, baseAnim: string, startFrame: number, endFrame: number, frameRate = 24, repeat = -1) => {
+            const frames: any[] = [];
+            for (let i = startFrame; i <= endFrame; i++) {
+                if (this.textures.exists(`${char}_${baseAnim}_${i}`)) {
+                    frames.push({ key: `${char}_${baseAnim}_${i}` });
+                }
+            }
+            if (frames.length > 0) {
+                this.anims.create({ key: `${char}_${anim}`, frames, frameRate, repeat });
+            }
+        };
 
         // If we have a manifest, create animations per character and honor per-character jabFrameRate
         if (manifest && manifest.characters) {
@@ -67,6 +80,20 @@ export class BattleScene extends Phaser.Scene {
                 // Jab: use per-character jabFrameRate if provided, else default
                 const jabRate = char.jabFrameRate ? Number(char.jabFrameRate) : defaultJabFrameRate;
                 makeAnim(name, 'jab', jabRate, 0);
+
+                // Duck animation (play once, hold last frame)
+                makeAnim(name, 'duck', 48, 0);
+
+                // Jump animations - split into 3 phases
+                // Jump Start (rising): frames 0-7
+                makeAnimFromRange(name, 'jump_start', 'jump', 0, 7, 48, 0);
+                // Jump Air (airborne): frames 8-21, loop
+                makeAnimFromRange(name, 'jump_air', 'jump', 8, 21, 18, -1);
+                // Jump Land (landing): frames 22-34
+                makeAnimFromRange(name, 'jump_land', 'jump', 22, 34, 48, 0);
+
+                // Block animation (play once, hold last frame)
+                makeAnim(name, 'block', 48, 0);
             });
         } else {
             // Fallback for Kevin only (older project state)
@@ -74,6 +101,14 @@ export class BattleScene extends Phaser.Scene {
             makeAnim(charName, 'walk', 24, -1);
             makeAnim(charName, 'idle', 12, -1);
             makeAnim(charName, 'jab', defaultJabFrameRate, 0);
+            makeAnim(charName, 'duck', 48, 0);
+            
+            // Jump animations - split into 3 phases
+            makeAnimFromRange(charName, 'jump_start', 'jump', 0, 7, 48, 0);
+            makeAnimFromRange(charName, 'jump_air', 'jump', 8, 21, 18, -1);
+            makeAnimFromRange(charName, 'jump_land', 'jump', 22, 34, 48, 0);
+            
+            makeAnim(charName, 'block', 48, 0);
         }
 
         // Create Fighters (default character name fallback)
@@ -142,8 +177,8 @@ export class BattleScene extends Phaser.Scene {
             p2Input = this.inputManager.getP2Input();
         }
 
-        this.p1.update(p1Input);
-        this.p2.update(p2Input);
+        this.p1.update(p1Input, time);
+        this.p2.update(p2Input, time);
 
         // Bounds Check
         if (this.p1.y > 800) {
@@ -155,7 +190,7 @@ export class BattleScene extends Phaser.Scene {
             this.p2.setVelocity(0, 0);
         }
 
-        this.combatSystem.update();
+        this.combatSystem.update(time);
 
         this.updateUI();
         this.checkRoundEnd();

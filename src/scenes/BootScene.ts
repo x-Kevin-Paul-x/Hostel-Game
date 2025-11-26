@@ -42,6 +42,27 @@ export class BootScene extends Phaser.Scene {
                             this.load.image(`${char.name}_jab_${index}`, frame);
                         });
                     }
+
+                    // Load Duck Frames (if provided)
+                    if (char.duckFrames && char.duckFrames.length > 0) {
+                        char.duckFrames.forEach((frame: string, index: number) => {
+                            this.load.image(`${char.name}_duck_${index}`, frame);
+                        });
+                    }
+
+                    // Load Jump Frames (if provided)
+                    if (char.jumpFrames && char.jumpFrames.length > 0) {
+                        char.jumpFrames.forEach((frame: string, index: number) => {
+                            this.load.image(`${char.name}_jump_${index}`, frame);
+                        });
+                    }
+
+                    // Load Block Frames (if provided)
+                    if (char.blockFrames && char.blockFrames.length > 0) {
+                        char.blockFrames.forEach((frame: string, index: number) => {
+                            this.load.image(`${char.name}_block_${index}`, frame);
+                        });
+                    }
             });
 
             this.load.start();

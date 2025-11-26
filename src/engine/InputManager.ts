@@ -9,6 +9,8 @@ export type InputMap = {
     punch: boolean;
     jab: boolean;
     kick: boolean;
+    block: boolean;
+    duck: boolean;
 };
 
 export class InputManager {
@@ -39,6 +41,8 @@ export class InputManager {
             this.keys.L = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.L);
             this.keys.E = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
             this.keys.H = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.H);
+            this.keys.Q = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q); // P1 Block
+            this.keys.U = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.U); // P2 Block
         }
     }
 
@@ -54,6 +58,8 @@ export class InputManager {
             punch: this.keys.F.isDown,
             jab: this.keys.E.isDown,
             kick: this.keys.G.isDown,
+            block: this.keys.Q.isDown, // Q for block
+            duck: this.wasd.down.isDown, // S for duck
         };
     }
 
@@ -69,10 +75,12 @@ export class InputManager {
             punch: this.keys.K.isDown,
             jab: this.keys.H.isDown,
             kick: this.keys.L.isDown,
+            block: this.keys.U.isDown, // U for block
+            duck: this.cursors.down.isDown, // Down arrow for duck
         };
     }
 
     private getEmptyInput(): InputMap {
-        return { left: false, right: false, up: false, down: false, jump: false, punch: false, jab: false, kick: false };
+        return { left: false, right: false, up: false, down: false, jump: false, punch: false, jab: false, kick: false, block: false, duck: false };
     }
 }
