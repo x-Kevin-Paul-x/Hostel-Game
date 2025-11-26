@@ -1,0 +1,37 @@
+{
+  "characters": [
+    {
+      "name": "Kevin",
+      "path": "Assets/Character/Kevin",
+      "walkFrames": [
+        "Assets/Character/Kevin/Walk/sprite_0000.png",
+        "Assets/Character/Kevin/Walk/sprite_0001.png",
+        "Assets/Character/Kevin/Walk/sprite_0002.png",
+        "Assets/Character/Kevin/Walk/sprite_0003.png",
+        "Assets/Character/Kevin/Walk/sprite_0004.png",
+        "Assets/Character/Kevin/Walk/sprite_0005.png",
+        "Assets/Character/Kevin/Walk/sprite_0006.png",
+        "Assets/Character/Kevin/Walk/sprite_0007.png",
+        "Assets/Character/Kevin/Walk/sprite_0008.png",
+        "Assets/Character/Kevin/Walk/sprite_0009.png",
+        "Assets/Character/Kevin/Walk/sprite_0010.png",
+        "Assets/Character/Kevin/Walk/sprite_0011.png",
+        "Assets/Character/Kevin/Walk/sprite_0012.png",
+        "Assets/Character/Kevin/Walk/sprite_0013.png",
+        "Assets/Character/Kevin/Walk/sprite_0014.png",
+        "Assets/Character/Kevin/Walk/sprite_0015.png",
+        "Assets/Character/Kevin/Walk/sprite_0016.png",
+        "Assets/Character/Kevin/Walk/sprite_0017.png",
+        "Assets/Character/Kevin/Walk/sprite_0018.png",
+        "Assets/Character/Kevin/Walk/sprite_0019.png"
+      ],
+      "idleFrame": "Assets/Character/Kevin/Walk/sprite_0014.png"
+    },
+    {
+      "name": "Laurren",
+      "path": "Assets/Character/Laurren",
+      "walkFrames": [],
+      "idleFrame": "Assets/Character/Laurren/Walk/sprite_0014.png"
+    }
+  ]
+}
