@@ -58,9 +58,10 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
 
         this.setCollideWorldBounds(true);
 
-        // Fix Physics Body Size & Alignment
+        // Set origin to bottom center for proper ground alignment
         this.setOrigin(0.5, 1);
-        this.setSize(80, 180);
+        
+        // Physics body size will be set after scaling in refreshBody()
 
         // Attack Box
         this.attackBox = scene.add.rectangle(x, y, 60, 40, 0xff0000, 0);
@@ -71,12 +72,37 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
         }
         this.attackBox.setVisible(false); // Set to true for debug
     }
+    
+    // Call this after setting scale to properly size the hitbox
+    public initializeHitbox() {
+        if (this.body && this.width > 0 && this.height > 0) {
+            const body = this.body as Phaser.Physics.Arcade.Body;
+            
+            // Hitbox should cover the character body (narrower for better gameplay)
+            const hitboxWidth = this.width * 0.35;  // 35% of sprite width
+            const hitboxHeight = this.height * 0.85; // 85% of sprite height
+            
+            body.setSize(hitboxWidth, hitboxHeight);
+            
+            // Since origin is (0.5, 1) - bottom center:
+            // Offset X: center the hitbox horizontally
+            // Offset Y: position from top of sprite, leaving small gap at top
+            const offsetX = (this.width - hitboxWidth) / 2;
+            const offsetY = this.height * 0.15; // Start 15% from top to leave head gap
+            body.setOffset(offsetX, offsetY);
+        }
+    }
 
     update(input: InputMap, time: number) {
-        // Ensure body is aligned with feet if texture loaded
+        // Keep hitbox aligned (for animation frame changes)
         if (this.body && this.height > 0) {
             const body = this.body as Phaser.Physics.Arcade.Body;
-            body.setOffset((this.width - body.width) / 2, this.height - body.height - 55);
+            const hitboxWidth = this.width * 0.35;
+            const hitboxHeight = this.height * 0.85;
+            const offsetX = (this.width - hitboxWidth) / 2;
+            const offsetY = this.height * 0.15;
+            body.setSize(hitboxWidth, hitboxHeight);
+            body.setOffset(offsetX, offsetY);
         }
 
         const body = this.body as Phaser.Physics.Arcade.Body;
@@ -165,9 +191,10 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
             return;
         }
 
-        // Update attack box position
-        const offsetX = this.flipX ? -50 : 50;
-        this.attackBox.setPosition(this.x + offsetX, this.y - 80);
+        // Update attack box position - position at chest/arm level for jab
+        const offsetX = this.flipX ? -60 : 60; // Horizontal offset based on facing direction
+        const attackY = this.y - (this.displayHeight * 0.6); // 60% up from feet (chest level)
+        this.attackBox.setPosition(this.x + offsetX, attackY);
 
         // Don't allow movement during landing
         if (this.currentState === 'LANDING') {

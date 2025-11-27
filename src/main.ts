@@ -3,16 +3,21 @@ import './style.css';
 import { TitleScene } from './scenes/TitleScene';
 import { BootScene } from './scenes/BootScene';
 import { BattleScene } from './scenes/BattleScene';
+import { SettingsScene } from './scenes/SettingsScene';
 
 const config: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
     scale: {
-        mode: Phaser.Scale.FIT,
+        mode: Phaser.Scale.RESIZE,
+        parent: 'app',
+        width: '100%',
+        height: '100%',
         autoCenter: Phaser.Scale.CENTER_BOTH,
-        width: 1280,
-        height: 720,
     },
-    parent: 'app',
+    audio: {
+        disableWebAudio: false,
+    },
+    pauseOnBlur: false, // Keep audio/video playing when tab loses focus
     physics: {
         default: 'arcade',
         arcade: {
@@ -20,7 +25,7 @@ const config: Phaser.Types.Core.GameConfig = {
             debug: true,
         },
     },
-    scene: [TitleScene, BootScene, BattleScene],
+    scene: [TitleScene, BootScene, BattleScene, SettingsScene],
 };
 
 new Phaser.Game(config);

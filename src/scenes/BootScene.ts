@@ -7,8 +7,10 @@ export class BootScene extends Phaser.Scene {
 
     preload() {
         this.load.json('character-manifest', '/character-manifest.json');
-        this.load.image('background', '/Assets/Environment/background.png');
-        this.load.image('floor', '/Assets/Environment/floor.png');
+        // Background video instead of image
+        this.load.video('backgroundVideo', '/Assets/Backgrounds/Video Project 1.mp4');
+        // Fight music
+        this.load.audio('fightMusic', '/Assets/Background Song/Fight Scene Songs/Final Round Fury.mp3');
     }
 
     create() {

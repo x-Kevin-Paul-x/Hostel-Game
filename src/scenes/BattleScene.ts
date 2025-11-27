@@ -4,6 +4,7 @@ import { InputManager } from '../engine/InputManager';
 import { CombatSystem } from '../engine/CombatSystem';
 import { AIController } from '../engine/AIController';
 import { HealthBar } from '../ui/HealthBar';
+import { SettingsManager } from '../utils/SettingsManager';
 
 export class BattleScene extends Phaser.Scene {
     private p1!: Fighter;
@@ -19,23 +20,66 @@ export class BattleScene extends Phaser.Scene {
 
     private isVsAI: boolean = false; // Default to local 2-player (AI off)
     private roundOver: boolean = false;
+    
+    private floor!: Phaser.GameObjects.Rectangle;
+    private backgroundVideo!: Phaser.GameObjects.Video;
+    private fightMusic!: Phaser.Sound.BaseSound;
 
     constructor() {
         super('BattleScene');
     }
 
     create() {
-        // Background
-        const bg = this.add.image(640, 360, 'background');
-        bg.setDisplaySize(1280, 720);
+        const { width, height } = this.scale;
+        
+        // Background video - loops and fits screen properly
+        this.backgroundVideo = this.add.video(width / 2, height / 2, 'backgroundVideo');
+        this.backgroundVideo.setLoop(true);
+        this.backgroundVideo.play(true); // muted for autoplay policy
 
-        // Create floor (Invisible physics barrier)
-        // Lowered floor to bottom of screen (y=710, height=20 -> top=700)
-        const floor = this.add.rectangle(640, 710, 1280, 20, 0x00ff00, 0.5);
-        this.physics.add.existing(floor, true); // Static body
+        // Wait for the video to be ready, then scale it to fit the screen
+        this.backgroundVideo.on('play', () => {
+            const videoWidth = this.backgroundVideo.width;
+            const videoHeight = this.backgroundVideo.height;
+            // Use "contain" scaling: fit within bounds without cropping
+            const scaleX = width / videoWidth;
+            const scaleY = height / videoHeight;
+            const scale = Math.min(scaleX, scaleY);
+            this.backgroundVideo.setScale(scale);
+        });
+        // Fallback: set display size immediately (will adjust once video metadata loads)
+        this.backgroundVideo.setDisplaySize(width, height);
 
-        // Visual Floor (TileSprite)
-        // this.add.tileSprite(640, 700, 1280, 60, 'floor');
+        // Fight Music - respect saved fight music settings
+        const settings = SettingsManager.getInstance();
+
+        // Stop title music if it's playing
+        const titleMusic = this.sound.get('bgMusic');
+        if (titleMusic && titleMusic.isPlaying) {
+            titleMusic.stop();
+        }
+
+        const existingFightMusic = this.sound.get('fightMusic');
+        if (existingFightMusic) {
+            this.fightMusic = existingFightMusic;
+        } else {
+            this.fightMusic = this.sound.add('fightMusic', {
+                loop: true,
+                volume: settings.get('fightMusicVolume')
+            });
+        }
+        if (settings.get('fightMusicEnabled')) {
+            (this.fightMusic as Phaser.Sound.WebAudioSound).setVolume(settings.get('fightMusicVolume'));
+            if (!this.fightMusic.isPlaying) {
+                this.fightMusic.play();
+            }
+        }
+
+        // Create invisible floor (physics barrier at bottom)
+        // Adjust the Y position to match where the floor appears in your background image
+        const floorY = height - 50; // Adjust this value to match your background's floor level
+        this.floor = this.add.rectangle(width / 2, floorY, width, 20, 0x00ff00, 0);
+        this.physics.add.existing(this.floor, true); // Static body
 
         // Create Animations dynamically from loaded texture keys and manifest settings
         const defaultJabFrameRate = 72; // double the previous 36 -> faster jab by default
@@ -127,15 +171,21 @@ export class BattleScene extends Phaser.Scene {
             }
         }
 
-        this.p1 = new Fighter(this, 300, 300, initialTexture, true);
-        this.p2 = new Fighter(this, 980, 300, initialTexture, false);
+        // Spawn fighters relative to screen size
+        const spawnY = height - 150; // Spawn above the floor
+        this.p1 = new Fighter(this, width * 0.25, spawnY, initialTexture, true);
+        this.p2 = new Fighter(this, width * 0.75, spawnY, initialTexture, false);
 
         this.p1.setScale(0.5);
         this.p2.setScale(0.5);
+        
+        // Initialize hitboxes after scaling
+        this.p1.initializeHitbox();
+        this.p2.initializeHitbox();
 
         // Colliders
-        this.physics.add.collider(this.p1, floor);
-        this.physics.add.collider(this.p2, floor);
+        this.physics.add.collider(this.p1, this.floor);
+        this.physics.add.collider(this.p2, this.floor);
         this.physics.add.collider(this.p1, this.p2);
 
         // Systems
@@ -148,6 +198,7 @@ export class BattleScene extends Phaser.Scene {
 
         // UI
         this.createUI();
+        this.createSettingsButton();
 
         // Timer
         this.roundTimer = 99;
@@ -180,15 +231,24 @@ export class BattleScene extends Phaser.Scene {
         this.p1.update(p1Input, time);
         this.p2.update(p2Input, time);
 
-        // Bounds Check
-        if (this.p1.y > 800) {
-            this.p1.setPosition(300, 300);
+        // Bounds Check - reset if player falls off screen
+        const { width, height } = this.scale;
+        const spawnY = height - 150;
+        
+        if (this.p1.y > height + 100) {
+            this.p1.setPosition(width * 0.25, spawnY);
             this.p1.setVelocity(0, 0);
         }
-        if (this.p2.y > 800) {
-            this.p2.setPosition(980, 300);
+        if (this.p2.y > height + 100) {
+            this.p2.setPosition(width * 0.75, spawnY);
             this.p2.setVelocity(0, 0);
         }
+        
+        // Keep players within screen bounds horizontally
+        if (this.p1.x < 50) this.p1.x = 50;
+        if (this.p1.x > width - 50) this.p1.x = width - 50;
+        if (this.p2.x < 50) this.p2.x = 50;
+        if (this.p2.x > width - 50) this.p2.x = width - 50;
 
         this.combatSystem.update(time);
 
@@ -197,35 +257,131 @@ export class BattleScene extends Phaser.Scene {
     }
 
     private createUI() {
-        // Player 1 Name
-        this.add.text(50, 50, 'Player 1', {
-            fontFamily: '"Press Start 2P", cursive',
-            fontSize: '24px',
-            color: '#fff',
-            stroke: '#000',
-            strokeThickness: 4
-        });
-
-        // Player 2 Name
-        this.add.text(1230, 50, 'Player 2', {
-            fontFamily: '"Press Start 2P", cursive',
-            fontSize: '24px',
-            color: '#fff',
-            stroke: '#000',
-            strokeThickness: 4
-        }).setOrigin(1, 0);
-
-        // Health Bars
-        this.p1HealthBar = new HealthBar(this, 50, 80, 450, 30, 100, true);
-        this.p2HealthBar = new HealthBar(this, 1230, 80, 450, 30, 100, false);
-
-        // Timer
-        this.timerText = this.add.text(640, 60, '99', {
-            fontFamily: '"Press Start 2P", cursive',
-            fontSize: '60px',
+        const { width } = this.scale;
+        
+        // Create retro UI panel at top
+        this.createRetroTopPanel(width);
+        
+        // Player 1 Name with retro styling
+        const p1NameBg = this.add.graphics();
+        p1NameBg.fillStyle(0x1a1a2e);
+        p1NameBg.fillRoundedRect(30, 20, 180, 35, 4);
+        p1NameBg.lineStyle(2, 0xffcc00);
+        p1NameBg.strokeRoundedRect(30, 20, 180, 35, 4);
+        
+        this.add.text(120, 37, 'PLAYER 1', {
+            fontFamily: '"Press Start 2P", monospace',
+            fontSize: '14px',
             color: '#ffcc00',
-            stroke: '#000',
-            strokeThickness: 6
+            stroke: '#000000',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+
+        // Player 2 Name with retro styling
+        const p2NameBg = this.add.graphics();
+        p2NameBg.fillStyle(0x1a1a2e);
+        p2NameBg.fillRoundedRect(width - 210, 20, 180, 35, 4);
+        p2NameBg.lineStyle(2, 0xffcc00);
+        p2NameBg.strokeRoundedRect(width - 210, 20, 180, 35, 4);
+        
+        this.add.text(width - 120, 37, 'PLAYER 2', {
+            fontFamily: '"Press Start 2P", monospace',
+            fontSize: '14px',
+            color: '#ffcc00',
+            stroke: '#000000',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+
+        // Health Bars - responsive width with more height for retro look
+        const healthBarWidth = Math.min(400, (width - 250) / 2);
+        this.p1HealthBar = new HealthBar(this, 50, 60, healthBarWidth, 35, 100, true);
+        this.p2HealthBar = new HealthBar(this, width - 50, 60, healthBarWidth, 35, 100, false);
+
+        // Retro Timer in center
+        this.createRetroTimer(width);
+    }
+    
+    private createRetroTopPanel(width: number) {
+        const graphics = this.add.graphics();
+        
+        // Center decorative frame for timer
+        const centerX = width / 2;
+        const frameWidth = 120;
+        const frameHeight = 80;
+        
+        // Outer dark frame
+        graphics.fillStyle(0x1a1a2e);
+        graphics.beginPath();
+        graphics.moveTo(centerX - frameWidth/2 - 15, 0);
+        graphics.lineTo(centerX + frameWidth/2 + 15, 0);
+        graphics.lineTo(centerX + frameWidth/2, frameHeight);
+        graphics.lineTo(centerX - frameWidth/2, frameHeight);
+        graphics.closePath();
+        graphics.fillPath();
+        
+        // Border
+        graphics.lineStyle(3, 0xffcc00);
+        graphics.beginPath();
+        graphics.moveTo(centerX - frameWidth/2, frameHeight);
+        graphics.lineTo(centerX - frameWidth/2 - 15, 0);
+        graphics.moveTo(centerX + frameWidth/2, frameHeight);
+        graphics.lineTo(centerX + frameWidth/2 + 15, 0);
+        graphics.lineTo(centerX - frameWidth/2 - 15, 0);
+        graphics.strokePath();
+        
+        // Bottom border
+        graphics.lineStyle(3, 0x6a6a8a);
+        graphics.beginPath();
+        graphics.moveTo(centerX - frameWidth/2, frameHeight);
+        graphics.lineTo(centerX + frameWidth/2, frameHeight);
+        graphics.strokePath();
+        
+        // Corner decorations
+        graphics.fillStyle(0xffcc00);
+        graphics.fillRect(centerX - frameWidth/2 - 10, 5, 6, 6);
+        graphics.fillRect(centerX + frameWidth/2 + 4, 5, 6, 6);
+        
+        // "VS" text above timer
+        this.add.text(centerX, 15, 'VS', {
+            fontFamily: '"Press Start 2P", monospace',
+            fontSize: '12px',
+            color: '#ff6666',
+            stroke: '#000000',
+            strokeThickness: 2
+        }).setOrigin(0.5);
+    }
+    
+    private createRetroTimer(width: number) {
+        const centerX = width / 2;
+        
+        // Timer background
+        const timerBg = this.add.graphics();
+        timerBg.fillStyle(0x0d0d1a);
+        timerBg.fillRoundedRect(centerX - 40, 28, 80, 45, 6);
+        timerBg.lineStyle(2, 0x4a4a6a);
+        timerBg.strokeRoundedRect(centerX - 40, 28, 80, 45, 6);
+        
+        // Timer text with glow effect
+        this.timerText = this.add.text(centerX, 50, '99', {
+            fontFamily: '"Press Start 2P", monospace',
+            fontSize: '32px',
+            color: '#ffcc00',
+            stroke: '#000000',
+            strokeThickness: 4,
+            shadow: {
+                offsetX: 0,
+                offsetY: 0,
+                color: '#ffcc00',
+                blur: 8,
+                fill: true
+            }
+        }).setOrigin(0.5);
+        
+        // "TIME" label
+        this.add.text(centerX, 78, 'TIME', {
+            fontFamily: '"Press Start 2P", monospace',
+            fontSize: '8px',
+            color: '#6a6a8a'
         }).setOrigin(0.5);
     }
 
@@ -251,9 +407,55 @@ export class BattleScene extends Phaser.Scene {
         }
     }
 
+    private createSettingsButton() {
+        const { width } = this.scale;
+        // Gear icon button in top-right corner
+        const btnSize = 40;
+        const padding = 20;
+        const btnX = width - btnSize / 2 - padding;
+        const btnY = btnSize / 2 + padding + 60; // below health bar area
+
+        const btnBg = this.add.rectangle(btnX, btnY, btnSize, btnSize, 0x1a1a2e);
+        btnBg.setStrokeStyle(2, 0xffcc00);
+        btnBg.setInteractive({ useHandCursor: true });
+
+        const gearText = this.add.text(btnX, btnY, '⚙', {
+            fontFamily: 'Arial',
+            fontSize: '24px',
+            color: '#ffcc00'
+        }).setOrigin(0.5);
+
+        btnBg.on('pointerover', () => {
+            btnBg.setFillStyle(0x2a2a4a);
+        });
+        btnBg.on('pointerout', () => {
+            btnBg.setFillStyle(0x1a1a2e);
+        });
+        btnBg.on('pointerdown', () => {
+            // Pause fight scene and open settings
+            this.scene.pause();
+            // Pause fight music while in settings
+            if (this.fightMusic && this.fightMusic.isPlaying) {
+                this.fightMusic.pause();
+            }
+            this.scene.launch('SettingsScene', { calledFrom: 'BattleScene' });
+        });
+
+        // Listen for resume to restart fight music if enabled
+        this.events.on('resume', () => {
+            const settings = SettingsManager.getInstance();
+            if (settings.get('fightMusicEnabled') && this.fightMusic && !this.fightMusic.isPlaying) {
+                (this.fightMusic as Phaser.Sound.WebAudioSound).setVolume(settings.get('fightMusicVolume'));
+                this.fightMusic.play();
+            }
+        });
+    }
+
     private showGameOver(text: string) {
+        const { width, height } = this.scale;
+        
         // Game Over Text
-        this.add.text(640, 300, text, {
+        this.add.text(width / 2, height / 2 - 50, text, {
             fontFamily: '"Press Start 2P", cursive',
             fontSize: '60px',
             color: '#ffcc00',
@@ -262,7 +464,7 @@ export class BattleScene extends Phaser.Scene {
         }).setOrigin(0.5);
 
         // Play Again Button
-        const playAgainBtn = this.add.text(640, 450, 'PLAY AGAIN', {
+        const playAgainBtn = this.add.text(width / 2, height / 2 + 100, 'PLAY AGAIN', {
             fontFamily: '"Press Start 2P", cursive',
             fontSize: '24px',
             color: '#ffffff',

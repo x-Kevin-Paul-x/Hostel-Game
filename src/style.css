@@ -1,14 +1,23 @@
-body {
+* {
     margin: 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
-    color: #ffffff;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
 }
 
 #app {
-    text-align: center;
+    width: 100%;
+    height: 100%;
+}
+
+#app canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
 }
