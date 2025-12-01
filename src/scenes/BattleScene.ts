@@ -156,28 +156,52 @@ export class BattleScene extends Phaser.Scene {
         }
 
         // Create Fighters (default character name fallback)
-        const charName = (manifest && manifest.characters && manifest.characters.length > 0) ? manifest.characters[0].name : 'Kevin';
+        const p1CharName = (manifest && manifest.characters && manifest.characters.length > 0) ? manifest.characters[0].name : 'Kevin';
+        let p2CharName = p1CharName;
 
-        // Determine initial texture key for idle: prefer first idle frame, then single idleFrame key
-        let initialTexture = `${charName}_idle`;
+        // Prefer Noel for player 2 when available; otherwise use second manifest entry if present
         if (manifest && manifest.characters) {
-            const charEntry = manifest.characters.find((c: any) => c.name === charName);
-            if (charEntry) {
-                if (charEntry.idleFrames && charEntry.idleFrames.length > 0) {
-                    initialTexture = `${charName}_idle_0`;
-                } else if (charEntry.idleFrame) {
-                    initialTexture = `${charName}_idle`;
-                }
+            const noelEntry = manifest.characters.find((c: any) => c.name === 'Noel');
+            if (noelEntry) {
+                p2CharName = 'Noel';
+            } else if (manifest.characters.length > 1) {
+                p2CharName = manifest.characters[1].name;
             }
         }
 
+        const getInitialTexture = (charNameParam: string) => {
+            let tex = `${charNameParam}_idle`;
+            if (manifest && manifest.characters) {
+                const charEntry = manifest.characters.find((c: any) => c.name === charNameParam);
+                if (charEntry) {
+                    if (charEntry.idleFrames && charEntry.idleFrames.length > 0) {
+                        tex = `${charNameParam}_idle_0`;
+                    } else if (charEntry.idleFrame) {
+                        tex = `${charNameParam}_idle`;
+                    }
+                }
+            }
+            return tex;
+        };
+
         // Spawn fighters relative to screen size
         const spawnY = height - 150; // Spawn above the floor
-        this.p1 = new Fighter(this, width * 0.25, spawnY, initialTexture, true);
-        this.p2 = new Fighter(this, width * 0.75, spawnY, initialTexture, false);
+        const p1InitialTexture = getInitialTexture(p1CharName);
+        const p2InitialTexture = getInitialTexture(p2CharName);
 
-        this.p1.setScale(0.5);
-        this.p2.setScale(0.5);
+        this.p1 = new Fighter(this, width * 0.25, spawnY, p1InitialTexture, true);
+        this.p2 = new Fighter(this, width * 0.75, spawnY, p2InitialTexture, false);
+
+        // Base visual scale for fighters
+        const baseScale = 0.5;
+        // Noel should be 1.23x larger than other characters
+        const noelScaleMultiplier = 1.23;
+
+        const p1Scale = p1CharName === 'Noel' ? baseScale * noelScaleMultiplier : baseScale;
+        const p2Scale = p2CharName === 'Noel' ? baseScale * noelScaleMultiplier : baseScale;
+
+        this.p1.setScale(p1Scale);
+        this.p2.setScale(p2Scale);
         
         // Initialize hitboxes after scaling
         this.p1.initializeHitbox();
@@ -419,7 +443,7 @@ export class BattleScene extends Phaser.Scene {
         btnBg.setStrokeStyle(2, 0xffcc00);
         btnBg.setInteractive({ useHandCursor: true });
 
-        const gearText = this.add.text(btnX, btnY, '⚙', {
+        this.add.text(btnX, btnY, '⚙', {
             fontFamily: 'Arial',
             fontSize: '24px',
             color: '#ffcc00'
