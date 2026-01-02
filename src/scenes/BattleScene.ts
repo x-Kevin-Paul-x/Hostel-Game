@@ -20,18 +20,54 @@ export class BattleScene extends Phaser.Scene {
 
     private isVsAI: boolean = false; // Default to local 2-player (AI off)
     private roundOver: boolean = false;
-    
+    private inputFrozen: boolean = false; // Freeze input during round start sequence
+
+    // Best of 3 Round System (1V1 Mode only)
+    private gameMode: '1v1' | 'story' = '1v1'; // Current game mode
+    private currentRound: number = 1;
+    private p1RoundWins: number = 0;
+    private p2RoundWins: number = 0;
+    private readonly ROUNDS_TO_WIN: number = 2;
+    private readonly MAX_ROUNDS: number = 3;
+
+    // Round win indicators (UI elements)
+    private p1WinIndicators: Phaser.GameObjects.Graphics[] = [];
+    private p2WinIndicators: Phaser.GameObjects.Graphics[] = [];
+
     private floor!: Phaser.GameObjects.Rectangle;
     private backgroundVideo!: Phaser.GameObjects.Video;
     private fightMusic!: Phaser.Sound.BaseSound;
+
+    // Starting positions for reset
+    private p1StartX!: number;
+    private p1StartY!: number;
+    private p2StartX!: number;
+    private p2StartY!: number;
+
+    // Character names for UI display
+    private p1CharName: string = 'P1';
+    private p2CharName: string = 'P2';
 
     constructor() {
         super('BattleScene');
     }
 
+    init(data: { p1Character?: string; p2Character?: string; isVsAI?: boolean }) {
+        // Accept character selections from CharacterSelectScene via BootScene
+        if (data?.p1Character) {
+            this.p1CharName = data.p1Character;
+        }
+        if (data?.p2Character) {
+            this.p2CharName = data.p2Character;
+        }
+        if (data?.isVsAI !== undefined) {
+            this.isVsAI = data.isVsAI;
+        }
+    }
+
     create() {
         const { width, height } = this.scale;
-        
+
         // Background video - loops and fits screen properly
         this.backgroundVideo = this.add.video(width / 2, height / 2, 'backgroundVideo');
         this.backgroundVideo.setLoop(true);
@@ -97,7 +133,7 @@ export class BattleScene extends Phaser.Scene {
                 this.anims.create({ key: `${char}_${anim}`, frames, frameRate, repeat });
             }
         };
-        
+
         // Create animation from specific frame range
         const makeAnimFromRange = (char: string, anim: string, baseAnim: string, startFrame: number, endFrame: number, frameRate = 24, repeat = -1) => {
             const frames: any[] = [];
@@ -146,26 +182,26 @@ export class BattleScene extends Phaser.Scene {
             makeAnim(charName, 'idle', 12, -1);
             makeAnim(charName, 'jab', defaultJabFrameRate, 0);
             makeAnim(charName, 'duck', 48, 0);
-            
+
             // Jump animations - split into 3 phases
             makeAnimFromRange(charName, 'jump_start', 'jump', 0, 7, 48, 0);
             makeAnimFromRange(charName, 'jump_air', 'jump', 8, 21, 18, -1);
             makeAnimFromRange(charName, 'jump_land', 'jump', 22, 34, 48, 0);
-            
+
             makeAnim(charName, 'block', 48, 0);
         }
 
         // Create Fighters (default character name fallback)
-        const p1CharName = (manifest && manifest.characters && manifest.characters.length > 0) ? manifest.characters[0].name : 'Kevin';
-        let p2CharName = p1CharName;
+        this.p1CharName = (manifest && manifest.characters && manifest.characters.length > 0) ? manifest.characters[0].name : 'Kevin';
+        this.p2CharName = this.p1CharName;
 
         // Prefer Noel for player 2 when available; otherwise use second manifest entry if present
         if (manifest && manifest.characters) {
             const noelEntry = manifest.characters.find((c: any) => c.name === 'Noel');
             if (noelEntry) {
-                p2CharName = 'Noel';
+                this.p2CharName = 'Noel';
             } else if (manifest.characters.length > 1) {
-                p2CharName = manifest.characters[1].name;
+                this.p2CharName = manifest.characters[1].name;
             }
         }
 
@@ -186,23 +222,29 @@ export class BattleScene extends Phaser.Scene {
 
         // Spawn fighters relative to screen size
         const spawnY = height - 150; // Spawn above the floor
-        const p1InitialTexture = getInitialTexture(p1CharName);
-        const p2InitialTexture = getInitialTexture(p2CharName);
+        const p1InitialTexture = getInitialTexture(this.p1CharName);
+        const p2InitialTexture = getInitialTexture(this.p2CharName);
 
         this.p1 = new Fighter(this, width * 0.25, spawnY, p1InitialTexture, true);
         this.p2 = new Fighter(this, width * 0.75, spawnY, p2InitialTexture, false);
+
+        // Store starting positions for round resets
+        this.p1StartX = width * 0.25;
+        this.p1StartY = spawnY;
+        this.p2StartX = width * 0.75;
+        this.p2StartY = spawnY;
 
         // Base visual scale for fighters
         const baseScale = 0.5;
         // Noel should be 1.23x larger than other characters
         const noelScaleMultiplier = 1.23;
 
-        const p1Scale = p1CharName === 'Noel' ? baseScale * noelScaleMultiplier : baseScale;
-        const p2Scale = p2CharName === 'Noel' ? baseScale * noelScaleMultiplier : baseScale;
+        const p1Scale = this.p1CharName === 'Noel' ? baseScale * noelScaleMultiplier : baseScale;
+        const p2Scale = this.p2CharName === 'Noel' ? baseScale * noelScaleMultiplier : baseScale;
 
         this.p1.setScale(p1Scale);
         this.p2.setScale(p2Scale);
-        
+
         // Initialize hitboxes after scaling
         this.p1.initializeHitbox();
         this.p2.initializeHitbox();
@@ -223,13 +265,14 @@ export class BattleScene extends Phaser.Scene {
         // UI
         this.createUI();
         this.createSettingsButton();
+        this.createRoundWinIndicators();
 
         // Timer
         this.roundTimer = 99;
         this.time.addEvent({
             delay: 1000,
             callback: () => {
-                if (this.roundOver) return;
+                if (this.roundOver || this.inputFrozen) return;
                 this.roundTimer--;
                 this.timerText.setText(this.roundTimer.toString());
                 if (this.roundTimer <= 0) {
@@ -238,10 +281,15 @@ export class BattleScene extends Phaser.Scene {
             },
             loop: true
         });
+
+        // Start round sequence for 1v1 mode
+        if (this.gameMode === '1v1') {
+            this.startRoundSequence();
+        }
     }
 
     update(time: number) {
-        if (this.roundOver) return;
+        if (this.roundOver || this.inputFrozen) return;
 
         const p1Input = this.inputManager.getP1Input();
         let p2Input;
@@ -258,7 +306,7 @@ export class BattleScene extends Phaser.Scene {
         // Bounds Check - reset if player falls off screen
         const { width, height } = this.scale;
         const spawnY = height - 150;
-        
+
         if (this.p1.y > height + 100) {
             this.p1.setPosition(width * 0.25, spawnY);
             this.p1.setVelocity(0, 0);
@@ -267,7 +315,7 @@ export class BattleScene extends Phaser.Scene {
             this.p2.setPosition(width * 0.75, spawnY);
             this.p2.setVelocity(0, 0);
         }
-        
+
         // Keep players within screen bounds horizontally
         if (this.p1.x < 50) this.p1.x = 50;
         if (this.p1.x > width - 50) this.p1.x = width - 50;
@@ -282,35 +330,38 @@ export class BattleScene extends Phaser.Scene {
 
     private createUI() {
         const { width } = this.scale;
-        
+
         // Create retro UI panel at top
         this.createRetroTopPanel(width);
-        
-        // Player 1 Name with retro styling
+
+        // Player 1 Name with character name and retro styling
         const p1NameBg = this.add.graphics();
         p1NameBg.fillStyle(0x1a1a2e);
-        p1NameBg.fillRoundedRect(30, 20, 180, 35, 4);
+        p1NameBg.fillRoundedRect(30, 20, 140, 35, 4);
         p1NameBg.lineStyle(2, 0xffcc00);
-        p1NameBg.strokeRoundedRect(30, 20, 180, 35, 4);
-        
-        this.add.text(120, 37, 'PLAYER 1', {
+        p1NameBg.strokeRoundedRect(30, 20, 140, 35, 4);
+
+        // Use character name (uppercase, max 8 chars for display)
+        const p1DisplayName = this.p1CharName.toUpperCase().substring(0, 8);
+        this.add.text(100, 37, p1DisplayName, {
             fontFamily: '"Press Start 2P", monospace',
-            fontSize: '14px',
+            fontSize: '12px',
             color: '#ffcc00',
             stroke: '#000000',
             strokeThickness: 3
         }).setOrigin(0.5);
 
-        // Player 2 Name with retro styling
+        // Player 2 Name with character name and retro styling
         const p2NameBg = this.add.graphics();
         p2NameBg.fillStyle(0x1a1a2e);
-        p2NameBg.fillRoundedRect(width - 210, 20, 180, 35, 4);
+        p2NameBg.fillRoundedRect(width - 170, 20, 140, 35, 4);
         p2NameBg.lineStyle(2, 0xffcc00);
-        p2NameBg.strokeRoundedRect(width - 210, 20, 180, 35, 4);
-        
-        this.add.text(width - 120, 37, 'PLAYER 2', {
+        p2NameBg.strokeRoundedRect(width - 170, 20, 140, 35, 4);
+
+        const p2DisplayName = this.p2CharName.toUpperCase().substring(0, 8);
+        this.add.text(width - 100, 37, p2DisplayName, {
             fontFamily: '"Press Start 2P", monospace',
-            fontSize: '14px',
+            fontSize: '12px',
             color: '#ffcc00',
             stroke: '#000000',
             strokeThickness: 3
@@ -324,47 +375,47 @@ export class BattleScene extends Phaser.Scene {
         // Retro Timer in center
         this.createRetroTimer(width);
     }
-    
+
     private createRetroTopPanel(width: number) {
         const graphics = this.add.graphics();
-        
+
         // Center decorative frame for timer
         const centerX = width / 2;
         const frameWidth = 120;
         const frameHeight = 80;
-        
+
         // Outer dark frame
         graphics.fillStyle(0x1a1a2e);
         graphics.beginPath();
-        graphics.moveTo(centerX - frameWidth/2 - 15, 0);
-        graphics.lineTo(centerX + frameWidth/2 + 15, 0);
-        graphics.lineTo(centerX + frameWidth/2, frameHeight);
-        graphics.lineTo(centerX - frameWidth/2, frameHeight);
+        graphics.moveTo(centerX - frameWidth / 2 - 15, 0);
+        graphics.lineTo(centerX + frameWidth / 2 + 15, 0);
+        graphics.lineTo(centerX + frameWidth / 2, frameHeight);
+        graphics.lineTo(centerX - frameWidth / 2, frameHeight);
         graphics.closePath();
         graphics.fillPath();
-        
+
         // Border
         graphics.lineStyle(3, 0xffcc00);
         graphics.beginPath();
-        graphics.moveTo(centerX - frameWidth/2, frameHeight);
-        graphics.lineTo(centerX - frameWidth/2 - 15, 0);
-        graphics.moveTo(centerX + frameWidth/2, frameHeight);
-        graphics.lineTo(centerX + frameWidth/2 + 15, 0);
-        graphics.lineTo(centerX - frameWidth/2 - 15, 0);
+        graphics.moveTo(centerX - frameWidth / 2, frameHeight);
+        graphics.lineTo(centerX - frameWidth / 2 - 15, 0);
+        graphics.moveTo(centerX + frameWidth / 2, frameHeight);
+        graphics.lineTo(centerX + frameWidth / 2 + 15, 0);
+        graphics.lineTo(centerX - frameWidth / 2 - 15, 0);
         graphics.strokePath();
-        
+
         // Bottom border
         graphics.lineStyle(3, 0x6a6a8a);
         graphics.beginPath();
-        graphics.moveTo(centerX - frameWidth/2, frameHeight);
-        graphics.lineTo(centerX + frameWidth/2, frameHeight);
+        graphics.moveTo(centerX - frameWidth / 2, frameHeight);
+        graphics.lineTo(centerX + frameWidth / 2, frameHeight);
         graphics.strokePath();
-        
+
         // Corner decorations
         graphics.fillStyle(0xffcc00);
-        graphics.fillRect(centerX - frameWidth/2 - 10, 5, 6, 6);
-        graphics.fillRect(centerX + frameWidth/2 + 4, 5, 6, 6);
-        
+        graphics.fillRect(centerX - frameWidth / 2 - 10, 5, 6, 6);
+        graphics.fillRect(centerX + frameWidth / 2 + 4, 5, 6, 6);
+
         // "VS" text above timer
         this.add.text(centerX, 15, 'VS', {
             fontFamily: '"Press Start 2P", monospace',
@@ -374,17 +425,17 @@ export class BattleScene extends Phaser.Scene {
             strokeThickness: 2
         }).setOrigin(0.5);
     }
-    
+
     private createRetroTimer(width: number) {
         const centerX = width / 2;
-        
+
         // Timer background
         const timerBg = this.add.graphics();
         timerBg.fillStyle(0x0d0d1a);
         timerBg.fillRoundedRect(centerX - 40, 28, 80, 45, 6);
         timerBg.lineStyle(2, 0x4a4a6a);
         timerBg.strokeRoundedRect(centerX - 40, 28, 80, 45, 6);
-        
+
         // Timer text with glow effect
         this.timerText = this.add.text(centerX, 50, '99', {
             fontFamily: '"Press Start 2P", monospace',
@@ -400,7 +451,7 @@ export class BattleScene extends Phaser.Scene {
                 fill: true
             }
         }).setOrigin(0.5);
-        
+
         // "TIME" label
         this.add.text(centerX, 78, 'TIME', {
             fontFamily: '"Press Start 2P", monospace',
@@ -412,22 +463,114 @@ export class BattleScene extends Phaser.Scene {
     private updateUI() {
         this.p1HealthBar.setHealth(this.p1.hp);
         this.p2HealthBar.setHealth(this.p2.hp);
+
+        // Update burst meters
+        this.p1HealthBar.setBurstMeter(this.p1.burstMeter);
+        this.p2HealthBar.setBurstMeter(this.p2.burstMeter);
     }
 
     private handleTimeOut() {
         this.roundOver = true;
-        let winner = 'Draw';
-        if (this.p1.hp > this.p2.hp) winner = 'Player 1 Wins!';
-        else if (this.p2.hp > this.p1.hp) winner = 'Player 2 Wins!';
 
-        this.showGameOver(winner);
+        let roundWinner: 'p1' | 'p2' | 'draw' = 'draw';
+        if (this.p1.hp > this.p2.hp) {
+            roundWinner = 'p1';
+        } else if (this.p2.hp > this.p1.hp) {
+            roundWinner = 'p2';
+        }
+
+        if (this.gameMode === '1v1') {
+            // Best of 3 system
+            if (roundWinner === 'p1') {
+                this.p1RoundWins++;
+                this.updateRoundWinIndicators();
+                this.showRoundResult('Player 1 Wins Round!');
+            } else if (roundWinner === 'p2') {
+                this.p2RoundWins++;
+                this.updateRoundWinIndicators();
+                this.showRoundResult('Player 2 Wins Round!');
+            } else {
+                // Draw - no one wins the round, proceed to next round
+                this.showRoundResult('Draw!');
+            }
+
+            // Check if match is over
+            if (this.p1RoundWins >= this.ROUNDS_TO_WIN) {
+                this.time.delayedCall(2000, () => {
+                    this.showMatchOver('Player 1 Wins the Match!');
+                });
+            } else if (this.p2RoundWins >= this.ROUNDS_TO_WIN) {
+                this.time.delayedCall(2000, () => {
+                    this.showMatchOver('Player 2 Wins the Match!');
+                });
+            } else if (this.currentRound < this.MAX_ROUNDS) {
+                // Start next round
+                this.currentRound++;
+                this.time.delayedCall(2500, () => {
+                    this.resetForNextRound();
+                });
+            } else {
+                // Max rounds reached, determine winner by total round wins
+                if (this.p1RoundWins > this.p2RoundWins) {
+                    this.time.delayedCall(2000, () => {
+                        this.showMatchOver('Player 1 Wins the Match!');
+                    });
+                } else if (this.p2RoundWins > this.p1RoundWins) {
+                    this.time.delayedCall(2000, () => {
+                        this.showMatchOver('Player 2 Wins the Match!');
+                    });
+                } else {
+                    this.time.delayedCall(2000, () => {
+                        this.showMatchOver('Match Draw!');
+                    });
+                }
+            }
+        } else {
+            // Original behavior for non-1v1 modes
+            let winner = 'Draw';
+            if (roundWinner === 'p1') winner = 'Player 1 Wins!';
+            else if (roundWinner === 'p2') winner = 'Player 2 Wins!';
+            this.showGameOver(winner);
+        }
     }
 
     private checkRoundEnd() {
         if (this.p1.currentState === 'KO' || this.p2.currentState === 'KO') {
             this.roundOver = true;
-            const winner = this.p1.currentState === 'KO' ? 'Player 2 Wins!' : 'Player 1 Wins!';
-            this.showGameOver(winner);
+
+            if (this.gameMode === '1v1') {
+                // Best of 3 system
+                if (this.p1.currentState === 'KO') {
+                    this.p2RoundWins++;
+                    this.updateRoundWinIndicators();
+                    this.showRoundResult('Player 2 Wins Round!');
+                } else {
+                    this.p1RoundWins++;
+                    this.updateRoundWinIndicators();
+                    this.showRoundResult('Player 1 Wins Round!');
+                }
+
+                // Check if match is over (first to 2 wins)
+                if (this.p1RoundWins >= this.ROUNDS_TO_WIN) {
+                    this.time.delayedCall(2000, () => {
+                        this.showMatchOver('Player 1 Wins the Match!');
+                    });
+                } else if (this.p2RoundWins >= this.ROUNDS_TO_WIN) {
+                    this.time.delayedCall(2000, () => {
+                        this.showMatchOver('Player 2 Wins the Match!');
+                    });
+                } else {
+                    // Start next round after delay
+                    this.currentRound++;
+                    this.time.delayedCall(2500, () => {
+                        this.resetForNextRound();
+                    });
+                }
+            } else {
+                // Non-1v1 mode - original behavior
+                const winner = this.p1.currentState === 'KO' ? 'Player 2 Wins!' : 'Player 1 Wins!';
+                this.showGameOver(winner);
+            }
         }
     }
 
@@ -437,7 +580,7 @@ export class BattleScene extends Phaser.Scene {
         const btnSize = 40;
         const padding = 20;
         const btnX = width - btnSize / 2 - padding;
-        const btnY = btnSize / 2 + padding + 60; // below health bar area
+        const btnY = btnSize / 2 + padding + 100; // below health bar area
 
         const btnBg = this.add.rectangle(btnX, btnY, btnSize, btnSize, 0x1a1a2e);
         btnBg.setStrokeStyle(2, 0xffcc00);
@@ -477,7 +620,7 @@ export class BattleScene extends Phaser.Scene {
 
     private showGameOver(text: string) {
         const { width, height } = this.scale;
-        
+
         // Game Over Text
         this.add.text(width / 2, height / 2 - 50, text, {
             fontFamily: '"Press Start 2P", cursive',
@@ -498,10 +641,378 @@ export class BattleScene extends Phaser.Scene {
             .setOrigin(0.5)
             .setInteractive({ useHandCursor: true })
             .on('pointerdown', () => {
+                this.resetMatchState();
                 this.scene.restart();
-                this.roundOver = false;
             })
             .on('pointerover', () => playAgainBtn.setStyle({ fill: '#ff0' }))
             .on('pointerout', () => playAgainBtn.setStyle({ fill: '#fff' }));
+    }
+
+    // ========== BEST OF 3 ROUND SYSTEM METHODS ==========
+
+    /**
+     * Creates the round win indicator squares adjacent to character names
+     */
+    private createRoundWinIndicators() {
+        const { width } = this.scale;
+        const indicatorY = 37; // Same Y as character name text
+        const indicatorSize = 10;
+        const indicatorSpacing = 22;
+
+        // P1 indicators (right of character name label, at x = 175+)
+        for (let i = 0; i < this.ROUNDS_TO_WIN; i++) {
+            const indicator = this.add.graphics();
+            const x = 185 + (i * indicatorSpacing);
+
+            // Draw retro-styled square indicator (matching panel aesthetic)
+            indicator.fillStyle(0x0d0d1a);
+            indicator.fillRoundedRect(x - indicatorSize / 2, indicatorY - indicatorSize / 2, indicatorSize, indicatorSize, 2);
+            indicator.lineStyle(2, 0xffcc00);
+            indicator.strokeRoundedRect(x - indicatorSize / 2, indicatorY - indicatorSize / 2, indicatorSize, indicatorSize, 2);
+
+            this.p1WinIndicators.push(indicator);
+        }
+
+        // P2 indicators (left of character name label - moved further for spacing)
+        for (let i = 0; i < this.ROUNDS_TO_WIN; i++) {
+            const indicator = this.add.graphics();
+            const x = width - 195 - (i * indicatorSpacing);
+
+            // Draw retro-styled square indicator
+            indicator.fillStyle(0x0d0d1a);
+            indicator.fillRoundedRect(x - indicatorSize / 2, indicatorY - indicatorSize / 2, indicatorSize, indicatorSize, 2);
+            indicator.lineStyle(2, 0xffcc00);
+            indicator.strokeRoundedRect(x - indicatorSize / 2, indicatorY - indicatorSize / 2, indicatorSize, indicatorSize, 2);
+
+            this.p2WinIndicators.push(indicator);
+        }
+    }
+
+    /**
+     * Updates the win indicators to show current round wins
+     */
+    private updateRoundWinIndicators() {
+        const indicatorY = 37; // Same Y as character name text
+        const indicatorSize = 10;
+        const indicatorSpacing = 22;
+        const { width } = this.scale;
+
+        // Update P1 indicators
+        for (let i = 0; i < this.ROUNDS_TO_WIN; i++) {
+            const indicator = this.p1WinIndicators[i];
+            const x = 185 + (i * indicatorSpacing);
+            indicator.clear();
+
+            if (i < this.p1RoundWins) {
+                // Filled (won) - bright green with glow effect
+                indicator.fillStyle(0x00dd00);
+                indicator.fillRoundedRect(x - indicatorSize / 2, indicatorY - indicatorSize / 2, indicatorSize, indicatorSize, 2);
+                indicator.lineStyle(2, 0x00ff00);
+                indicator.strokeRoundedRect(x - indicatorSize / 2, indicatorY - indicatorSize / 2, indicatorSize, indicatorSize, 2);
+            } else {
+                // Empty (not won) - retro styled
+                indicator.fillStyle(0x0d0d1a);
+                indicator.fillRoundedRect(x - indicatorSize / 2, indicatorY - indicatorSize / 2, indicatorSize, indicatorSize, 2);
+                indicator.lineStyle(2, 0xffcc00);
+                indicator.strokeRoundedRect(x - indicatorSize / 2, indicatorY - indicatorSize / 2, indicatorSize, indicatorSize, 2);
+            }
+        }
+
+        // Update P2 indicators
+        for (let i = 0; i < this.ROUNDS_TO_WIN; i++) {
+            const indicator = this.p2WinIndicators[i];
+            const x = width - 195 - (i * indicatorSpacing);
+            indicator.clear();
+
+            if (i < this.p2RoundWins) {
+                // Filled (won) - bright green with glow effect
+                indicator.fillStyle(0x00dd00);
+                indicator.fillRoundedRect(x - indicatorSize / 2, indicatorY - indicatorSize / 2, indicatorSize, indicatorSize, 2);
+                indicator.lineStyle(2, 0x00ff00);
+                indicator.strokeRoundedRect(x - indicatorSize / 2, indicatorY - indicatorSize / 2, indicatorSize, indicatorSize, 2);
+            } else {
+                // Empty (not won) - retro styled
+                indicator.fillStyle(0x0d0d1a);
+                indicator.fillRoundedRect(x - indicatorSize / 2, indicatorY - indicatorSize / 2, indicatorSize, indicatorSize, 2);
+                indicator.lineStyle(2, 0xffcc00);
+                indicator.strokeRoundedRect(x - indicatorSize / 2, indicatorY - indicatorSize / 2, indicatorSize, indicatorSize, 2);
+            }
+        }
+    }
+
+    /**
+     * Executes the round start sequence:
+     * 1. Freeze input
+     * 2. Show round title for 1 second
+     * 3. Show FIGHT splash for 0.75 seconds
+     * 4. Unfreeze and start round
+     */
+    private startRoundSequence() {
+        const { width, height } = this.scale;
+
+        // Freeze all input
+        this.inputFrozen = true;
+        this.roundOver = false;
+
+        // Get the appropriate round title asset
+        const roundKey = `round${this.currentRound}`;
+
+        // Create round title image centered on screen
+        const roundTitle = this.add.image(width / 2, height / 2, roundKey);
+        roundTitle.setDepth(1000);
+
+        // Scale to fit screen properly (max 60% of screen width or 40% of height)
+        const maxWidth = width * 0.6;
+        const maxHeight = height * 0.4;
+        const scaleX = maxWidth / roundTitle.width;
+        const scaleY = maxHeight / roundTitle.height;
+        const targetScale = Math.min(scaleX, scaleY);
+
+        roundTitle.setScale(targetScale * 0.8);
+        roundTitle.setAlpha(0);
+
+        // Fade in the round title
+        this.tweens.add({
+            targets: roundTitle,
+            alpha: 1,
+            scale: targetScale,
+            duration: 200,
+            ease: 'Power2'
+        });
+
+        // After 1 second, hide round title and show FIGHT
+        this.time.delayedCall(1000, () => {
+            // Store the current scale for fade out
+            const currentScale = roundTitle.scale;
+
+            // Fade out round title
+            this.tweens.add({
+                targets: roundTitle,
+                alpha: 0,
+                scale: currentScale * 1.2,
+                duration: 150,
+                ease: 'Power2',
+                onComplete: () => {
+                    roundTitle.destroy();
+                }
+            });
+
+            // Show FIGHT splash
+            const fightSplash = this.add.image(width / 2, height / 2, 'fightSplash');
+            fightSplash.setDepth(1000);
+
+            // Scale FIGHT splash to fit screen properly (max 50% of screen width or 35% of height)
+            const fightMaxWidth = width * 0.5;
+            const fightMaxHeight = height * 0.35;
+            const fightScaleX = fightMaxWidth / fightSplash.width;
+            const fightScaleY = fightMaxHeight / fightSplash.height;
+            const fightTargetScale = Math.min(fightScaleX, fightScaleY);
+
+            fightSplash.setScale(fightTargetScale * 0.5);
+            fightSplash.setAlpha(0);
+
+            // Animate FIGHT splash in
+            this.tweens.add({
+                targets: fightSplash,
+                alpha: 1,
+                scale: fightTargetScale,
+                duration: 150,
+                ease: 'Back.easeOut'
+            });
+
+            // After 0.75 seconds, remove FIGHT and start round
+            this.time.delayedCall(750, () => {
+                // Fade out FIGHT
+                this.tweens.add({
+                    targets: fightSplash,
+                    alpha: 0,
+                    scale: fightTargetScale * 1.5,
+                    duration: 150,
+                    ease: 'Power2',
+                    onComplete: () => {
+                        fightSplash.destroy();
+                    }
+                });
+
+                // Unfreeze input - START THE FIGHT!
+                this.inputFrozen = false;
+            });
+        });
+    }
+
+    /**
+     * Shows a round result message (e.g., "Player 1 Wins Round!")
+     */
+    private showRoundResult(text: string) {
+        const { width, height } = this.scale;
+
+        const resultText = this.add.text(width / 2, height / 2, text, {
+            fontFamily: '"Press Start 2P", cursive',
+            fontSize: '40px',
+            color: '#ffcc00',
+            stroke: '#000',
+            strokeThickness: 6
+        }).setOrigin(0.5).setDepth(1000);
+
+        // Animate the text
+        this.tweens.add({
+            targets: resultText,
+            y: height / 2 - 20,
+            duration: 500,
+            ease: 'Power2'
+        });
+
+        // Fade out after delay
+        this.time.delayedCall(2000, () => {
+            this.tweens.add({
+                targets: resultText,
+                alpha: 0,
+                duration: 300,
+                onComplete: () => {
+                    resultText.destroy();
+                }
+            });
+        });
+    }
+
+    /**
+     * Shows the final match result and provides play again option
+     */
+    private showMatchOver(text: string) {
+        const { width, height } = this.scale;
+
+        // Dark overlay
+        const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7);
+        overlay.setDepth(999);
+
+        // Match Result Text
+        this.add.text(width / 2, height / 2 - 80, text, {
+            fontFamily: '"Press Start 2P", cursive',
+            fontSize: '48px',
+            color: '#ffcc00',
+            stroke: '#000',
+            strokeThickness: 8
+        }).setOrigin(0.5).setDepth(1000);
+
+        // Score display
+        this.add.text(width / 2, height / 2, `${this.p1RoundWins} - ${this.p2RoundWins}`, {
+            fontFamily: '"Press Start 2P", cursive',
+            fontSize: '36px',
+            color: '#ffffff',
+            stroke: '#000',
+            strokeThickness: 4
+        }).setOrigin(0.5).setDepth(1000);
+
+        // Play Again Button
+        const playAgainBtn = this.add.text(width / 2, height / 2 + 100, 'PLAY AGAIN', {
+            fontFamily: '"Press Start 2P", cursive',
+            fontSize: '24px',
+            color: '#ffffff',
+            backgroundColor: '#333333',
+            padding: { x: 20, y: 10 }
+        })
+            .setOrigin(0.5)
+            .setDepth(1000)
+            .setInteractive({ useHandCursor: true })
+            .on('pointerdown', () => {
+                this.resetMatchState();
+                this.scene.restart();
+            })
+            .on('pointerover', () => playAgainBtn.setStyle({ fill: '#ff0' }))
+            .on('pointerout', () => playAgainBtn.setStyle({ fill: '#fff' }));
+
+        // Main Menu Button
+        const menuBtn = this.add.text(width / 2, height / 2 + 160, 'MAIN MENU', {
+            fontFamily: '"Press Start 2P", cursive',
+            fontSize: '20px',
+            color: '#aaaaaa',
+            backgroundColor: '#222222',
+            padding: { x: 15, y: 8 }
+        })
+            .setOrigin(0.5)
+            .setDepth(1000)
+            .setInteractive({ useHandCursor: true })
+            .on('pointerdown', () => {
+                this.resetMatchState();
+                // Stop fight music
+                if (this.fightMusic && this.fightMusic.isPlaying) {
+                    this.fightMusic.stop();
+                }
+                this.scene.start('TitleScene');
+            })
+            .on('pointerover', () => menuBtn.setStyle({ fill: '#ff0' }))
+            .on('pointerout', () => menuBtn.setStyle({ fill: '#aaa' }));
+    }
+
+    /**
+     * Resets fighters and game state for the next round
+     */
+    private resetForNextRound() {
+        // Reset health
+        this.p1.hp = this.p1.maxHp;
+        this.p2.hp = this.p2.maxHp;
+
+        // Reset positions
+        this.p1.setPosition(this.p1StartX, this.p1StartY);
+        this.p2.setPosition(this.p2StartX, this.p2StartY);
+
+        // Reset velocities
+        this.p1.setVelocity(0, 0);
+        this.p2.setVelocity(0, 0);
+
+        // Reset fighter states
+        this.p1.currentState = 'IDLE';
+        this.p2.currentState = 'IDLE';
+        this.p1.clearTint();
+        this.p2.clearTint();
+
+        // Reset combo counters
+        this.p1.resetCombo();
+        this.p2.resetCombo();
+
+        // Reset burst meters and stale moves
+        this.p1.resetBurstMeter();
+        this.p2.resetBurstMeter();
+        this.p1.resetStaleMoves();
+        this.p2.resetStaleMoves();
+
+        // Reset invincibility
+        this.p1.invincible = false;
+        this.p2.invincible = false;
+
+        // Reset hitstun
+        this.p1.hitstunRemaining = 0;
+        this.p2.hitstunRemaining = 0;
+
+        // Reset tech recovery
+        this.p1.canTechRecover = false;
+        this.p2.canTechRecover = false;
+
+        // Reset timer
+        this.roundTimer = 99;
+        this.timerText.setText('99');
+
+        // Reset round state
+        this.roundOver = false;
+
+        // Update UI
+        this.p1HealthBar.setHealth(this.p1.hp);
+        this.p2HealthBar.setHealth(this.p2.hp);
+        this.p1HealthBar.setBurstMeter(0);
+        this.p2HealthBar.setBurstMeter(0);
+
+        // Start the next round sequence
+        this.startRoundSequence();
+    }
+
+    /**
+     * Resets all match state (for complete restart)
+     */
+    private resetMatchState() {
+        this.currentRound = 1;
+        this.p1RoundWins = 0;
+        this.p2RoundWins = 0;
+        this.roundOver = false;
+        this.inputFrozen = false;
     }
 }
