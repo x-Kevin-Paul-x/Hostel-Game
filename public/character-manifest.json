@@ -190,13 +190,6 @@
       ]
     },
     {
-      "name": "Laurren",
-      "path": "Assets/Character/Laurren",
-      "walkFrames": [],
-      "idleFrame": "Assets/Character/Laurren/Walk/sprite_0014.png"
-    }
-    ,
-    {
       "name": "Noel",
       "path": "Assets/Character/Noel",
       "walkFrames": [],
