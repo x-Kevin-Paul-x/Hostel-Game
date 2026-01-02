@@ -18,7 +18,7 @@ const config: Phaser.Types.Core.GameConfig = {
     audio: {
         disableWebAudio: false,
     },
-    pauseOnBlur: false, // Keep audio/video playing when tab loses focus
+    //pauseOnBlur: false, // Keep audio/video playing when tab loses focus
     physics: {
         default: 'arcade',
         arcade: {
