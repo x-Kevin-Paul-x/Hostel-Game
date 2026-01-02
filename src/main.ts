@@ -4,14 +4,15 @@ import { TitleScene } from './scenes/TitleScene';
 import { BootScene } from './scenes/BootScene';
 import { BattleScene } from './scenes/BattleScene';
 import { SettingsScene } from './scenes/SettingsScene';
+import { CharacterSelectScene } from './scenes/CharacterSelectScene';
 
 const config: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
     scale: {
-        mode: Phaser.Scale.RESIZE,
+        mode: Phaser.Scale.FIT,
         parent: 'app',
-        width: '100%',
-        height: '100%',
+        width: 1280,
+        height: 720,
         autoCenter: Phaser.Scale.CENTER_BOTH,
     },
     audio: {
@@ -25,7 +26,7 @@ const config: Phaser.Types.Core.GameConfig = {
             debug: true,
         },
     },
-    scene: [TitleScene, BootScene, BattleScene, SettingsScene],
+    scene: [TitleScene, CharacterSelectScene, BootScene, BattleScene, SettingsScene],
 };
 
 new Phaser.Game(config);

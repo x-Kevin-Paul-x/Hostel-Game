@@ -35,28 +35,28 @@ export class TitleScene extends Phaser.Scene {
 
         // Background Video - loops infinitely and spans entire screen
         this.menuVideo = this.add.video(width / 2, height / 2, 'menuVideo');
-        
+
         // Wait for video to be ready, then set proper dimensions
         this.menuVideo.on('play', () => {
             // Scale video to cover entire screen while maintaining aspect ratio
             const videoWidth = this.menuVideo.width;
             const videoHeight = this.menuVideo.height;
-            
+
             // Calculate scale to cover the entire screen
             const scaleX = width / videoWidth;
             const scaleY = height / videoHeight;
             const scale = Math.max(scaleX, scaleY); // Use max to cover entire screen
-            
+
             this.menuVideo.setScale(scale);
         });
-        
+
         // Set display size as fallback
         this.menuVideo.setDisplaySize(width, height);
         this.menuVideo.setLoop(true);
-        
+
         // Play the video - muted for autoplay policy, then unmute after user interaction
         this.menuVideo.play(true);
-        
+
         // Handle video looping manually as a backup
         this.menuVideo.on('complete', () => {
             this.menuVideo.play(true);
@@ -169,7 +169,7 @@ export class TitleScene extends Phaser.Scene {
         btnSettings.on('pointerdown', () => {
             // Open settings scene as overlay
             this.scene.pause();
-            this.scene.launch('SettingsScene');
+            this.scene.launch('SettingsScene', { calledFrom: 'TitleScene' });
         });
 
         // Initialize registry from persisted SettingsManager so saved preferences persist
@@ -211,14 +211,18 @@ export class TitleScene extends Phaser.Scene {
         // Setup Media Session API for background audio persistence
         this.setupMediaSession();
 
-        // Listen for title music settings changes
+        // Listen for title music settings changes - only when this scene is active
         this.registry.events.on('changedata-titleMusicVolume', (_: any, value: number) => {
+            // Only update if TitleScene is actually running
+            if (!this.scene.isActive('TitleScene')) return;
             if (this.bgMusic) {
                 (this.bgMusic as Phaser.Sound.WebAudioSound).setVolume(value);
             }
         });
 
         this.registry.events.on('changedata-titleMusicEnabled', (_: any, enabled: boolean) => {
+            // Only update if TitleScene is actually running
+            if (!this.scene.isActive('TitleScene')) return;
             if (this.bgMusic) {
                 if (enabled) {
                     if (!this.bgMusic.isPlaying) {
@@ -303,10 +307,10 @@ export class TitleScene extends Phaser.Scene {
             this.menuVideo.stop();
         }
 
-        // Camera fade and transition
+        // Camera fade and transition to character select
         this.cameras.main.fadeOut(500, 0, 0, 0);
         this.cameras.main.once('camerafadeoutcomplete', () => {
-            this.scene.start('BootScene');
+            this.scene.start('CharacterSelectScene');
         });
     }
 }
