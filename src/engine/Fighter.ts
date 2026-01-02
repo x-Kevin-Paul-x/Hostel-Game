@@ -10,44 +10,59 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     public currentState: FighterState = 'IDLE';
     public lastAttackType: 'punch' | 'kick' | 'jab' | 'air_punch' | 'air_kick' | null = null;
     public isBlocking: boolean = false;
+    public isDucking: boolean = false;
 
     // Combo system
     public comboCount: number = 0;
     public lastHitTime: number = 0;
     private comboTimer: number = 800; // ms to continue combo
-    
+
+    // Burst/Combo Breaker system
+    public burstMeter: number = 100; // Fills up when taking damage
+    public maxBurstMeter: number = 100;
+    private burstCost: number = 100;
+    public canBurst: boolean = false;
+
+    // Stale move scaling - tracks recent attacks
+    private recentAttacks: string[] = [];
+    private maxRecentAttacks: number = 8;
+
+    // Tech recovery - recover faster from knockback
+    public canTechRecover: boolean = false;
+    private techRecoveryWindow: number = 300; // ms window to tech
+
     // Air control
     public isAirborne: boolean = false;
     public canDoubleJump: boolean = false;
     public hasDoubleJumped: boolean = false;
-    private airControl: number = 0.7; // Reduced control in air
-    
+    private airControl: number = 0.85; // Good air control for combos
+
     // Jump phase tracking
     private jumpPhase: 'none' | 'rising' | 'airborne' | 'falling' | 'landing' = 'none';
-    
+
     // Attack cooldowns
     private lastAttackTime: number = 0;
     private attackCooldown: number = 100; // Minimum time between attacks
-    
+
     // Facing opponent
     public facingRight: boolean = true;
-    
+
     // Stun/hitstun properties
     public hitstunRemaining: number = 0;
     public knockbackVelocity: { x: number, y: number } = { x: 0, y: 0 };
-    
+
     // Invincibility frames after getting hit
     public invincible: boolean = false;
     private invincibilityDuration: number = 200;
 
     public attackBox: Phaser.GameObjects.Rectangle;
-    private moveSpeed: number = 200; // Increased from 160
-    private jumpForce: number = -550; // Slightly stronger jump
-    private doubleJumpForce: number = -450; // Weaker second jump
-    
-    // Gravity scaling for floatier jumps
-    private normalGravity: number = 1000;
-    private fallingGravity: number = 1400; // Faster falling
+    private moveSpeed: number = 240; // Snappy ground movement
+    private jumpForce: number = -620; // Strong initial jump
+    private doubleJumpForce: number = -500; // Solid second jump
+
+    // Gravity scaling for better jump feel
+    private normalGravity: number = 900; // Slightly floaty for combo potential
+    private fallingGravity: number = 1500; // Fast fall for responsiveness
 
     constructor(scene: Phaser.Scene, x: number, y: number, texture: string, isPlayer1: boolean) {
         super(scene, x, y, texture);
@@ -60,7 +75,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
 
         // Set origin to bottom center for proper ground alignment
         this.setOrigin(0.5, 1);
-        
+
         // Physics body size will be set after scaling in refreshBody()
 
         // Attack Box
@@ -72,54 +87,77 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
         }
         this.attackBox.setVisible(false); // Set to true for debug
     }
-    
+
     // Call this after setting scale to properly size the hitbox
     public initializeHitbox() {
         if (this.body && this.width > 0 && this.height > 0) {
             const body = this.body as Phaser.Physics.Arcade.Body;
-            
+
             // Hitbox should cover the character body (narrower for better gameplay)
-            const hitboxWidth = this.width * 0.35;  // 35% of sprite width
+            const hitboxWidth = this.width * 0.4;  // 40% of sprite width for better collision
             const hitboxHeight = this.height * 0.85; // 85% of sprite height
-            
+
             body.setSize(hitboxWidth, hitboxHeight);
-            
+
             // Since origin is (0.5, 1) - bottom center:
             // Offset X: center the hitbox horizontally
             // Offset Y: position from top of sprite, leaving small gap at top
             const offsetX = (this.width - hitboxWidth) / 2;
             const offsetY = this.height * 0.15; // Start 15% from top to leave head gap
             body.setOffset(offsetX, offsetY);
+
+            // Important physics settings for solid collision
+            body.setMass(100); // Heavy mass
+            body.setBounce(0, 0); // No bouncing
+            body.setMaxVelocity(400, 800); // Limit max velocity
+            body.setDragX(1000); // High friction to stop quickly when pushed
+            body.pushable = false; // Prevent being pushed by other bodies
         }
     }
 
     update(input: InputMap, time: number) {
-        // Keep hitbox aligned (for animation frame changes)
+        // Dynamic hitbox sizing based on state (ducking = smaller hitbox)
         if (this.body && this.height > 0) {
             const body = this.body as Phaser.Physics.Arcade.Body;
-            const hitboxWidth = this.width * 0.35;
-            const hitboxHeight = this.height * 0.85;
+            const hitboxWidth = this.width * 0.4;
+
+            // Ducking reduces hitbox height significantly
+            let hitboxHeight: number;
+            let offsetY: number;
+
+            if (this.isDucking) {
+                hitboxHeight = this.height * 0.45; // 45% height when ducking
+                offsetY = this.height * 0.55; // Lower offset to keep feet on ground
+            } else {
+                hitboxHeight = this.height * 0.85;
+                offsetY = this.height * 0.15;
+            }
+
             const offsetX = (this.width - hitboxWidth) / 2;
-            const offsetY = this.height * 0.15;
             body.setSize(hitboxWidth, hitboxHeight);
             body.setOffset(offsetX, offsetY);
         }
 
         const body = this.body as Phaser.Physics.Arcade.Body;
-        
+
+        // Dynamic immovable logic removed to fix falling through floor
+        // We rely on pushable=false and high mass/drag for solid feel
+
+        // Track airborne state
+
         // Track airborne state
         const wasAirborne = this.isAirborne;
         this.isAirborne = !body?.touching.down;
-        
+
         // Update jump phase based on velocity and grounded state
         this.updateJumpPhase(body, wasAirborne);
-        
+
         // Reset double jump when landing
         if (wasAirborne && !this.isAirborne) {
             this.hasDoubleJumped = false;
             this.canDoubleJump = false;
         }
-        
+
         // Apply variable gravity for better jump feel
         if (this.isAirborne && body) {
             if (body.velocity.y > 0) {
@@ -136,13 +174,36 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
         } else if (body) {
             body.setGravityY(0);
         }
-        
+
         // Handle hitstun countdown
         if (this.currentState === 'HITSTUN') {
             this.hitstunRemaining -= 16; // Approximate frame time
+
+            // Burst out of combo (costs full burst meter)
+            if (this.canBurst && this.burstMeter >= this.burstCost && (input.block && input.jump)) {
+                this.performBurst();
+                return;
+            }
+
+            // Tech recovery - press block during knockback to recover faster
+            if (this.canTechRecover && input.block && !this.isAirborne) {
+                this.hitstunRemaining = 0;
+                this.currentState = 'IDLE';
+                this.clearTint();
+                this.setVelocityX(0);
+                // Brief invincibility after tech
+                this.invincible = true;
+                this.scene.time.delayedCall(150, () => {
+                    this.invincible = false;
+                });
+                this.showTechEffect();
+                return;
+            }
+
             if (this.hitstunRemaining <= 0) {
                 this.currentState = 'IDLE';
                 this.clearTint();
+                this.canTechRecover = false;
             }
             return;
         }
@@ -175,6 +236,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
 
         // Handle ducking state (only on ground)
         if (input.duck && !this.isAirborne && this.currentState !== 'ATTACK' && this.currentState !== 'BLOCK') {
+            this.isDucking = true; // Enable smaller hitbox
             if (this.currentState !== 'DUCK') {
                 this.currentState = 'DUCK';
                 this.setVelocityX(0);
@@ -189,6 +251,8 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
             }
             if (this.attackBox.body) (this.attackBox.body as Phaser.Physics.Arcade.Body).enable = false;
             return;
+        } else {
+            this.isDucking = false; // Reset to normal hitbox
         }
 
         // Update attack box position - position at chest/arm level for jab
@@ -205,13 +269,13 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
         // Movement with air control
         if (this.currentState !== 'ATTACK' && this.currentState !== 'AIR_ATTACK') {
             const currentSpeed = this.isAirborne ? this.moveSpeed * this.airControl : this.moveSpeed;
-            
+
             if (input.left) {
                 if (this.isAirborne) {
-                    // Air control - lerp towards desired velocity
+                    // Air control - smoother interpolation for better feel
                     const targetVel = -currentSpeed;
                     const currentVel = body?.velocity.x || 0;
-                    this.setVelocityX(Phaser.Math.Linear(currentVel, targetVel, 0.1));
+                    this.setVelocityX(Phaser.Math.Linear(currentVel, targetVel, 0.18));
                 } else {
                     this.setVelocityX(-currentSpeed);
                 }
@@ -223,9 +287,10 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
                 }
             } else if (input.right) {
                 if (this.isAirborne) {
+                    // Air control - smoother interpolation
                     const targetVel = currentSpeed;
                     const currentVel = body?.velocity.x || 0;
-                    this.setVelocityX(Phaser.Math.Linear(currentVel, targetVel, 0.1));
+                    this.setVelocityX(Phaser.Math.Linear(currentVel, targetVel, 0.18));
                 } else {
                     this.setVelocityX(currentSpeed);
                 }
@@ -237,9 +302,9 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
                 }
             } else {
                 if (this.isAirborne) {
-                    // Air friction
+                    // Air friction - gradual slowdown
                     const currentVel = body?.velocity.x || 0;
-                    this.setVelocityX(currentVel * 0.98);
+                    this.setVelocityX(currentVel * 0.96);
                 } else {
                     this.setVelocityX(0);
                     this.currentState = 'IDLE';
@@ -264,7 +329,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
                     this.playCharacterAnim('jump_start', false);
                 }
             }
-            
+
             // Enable double jump after leaving ground (for a brief window)
             if (this.isAirborne && !wasAirborne) {
                 this.canDoubleJump = true;
@@ -273,7 +338,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
 
         // Attack cooldown check
         const canAttack = time - this.lastAttackTime > this.attackCooldown;
-        
+
         // Ground attacks
         if (!this.isAirborne && canAttack) {
             if (input.jab && this.currentState !== 'ATTACK') {
@@ -284,7 +349,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
                 this.performAttack('kick', time);
             }
         }
-        
+
         // Air attacks
         if (this.isAirborne && canAttack && this.currentState !== 'AIR_ATTACK') {
             if (input.punch) {
@@ -294,7 +359,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
             }
         }
     }
-    
+
     private playCharacterAnim(anim: string, ignoreIfPlaying: boolean = true) {
         try {
             const texKey = (this.texture as Phaser.Textures.Texture).key;
@@ -311,7 +376,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
             }
         } catch (e) { }
     }
-    
+
     private updateJumpPhase(body: Phaser.Physics.Arcade.Body, wasAirborne: boolean) {
         if (!this.isAirborne && wasAirborne) {
             // Just landed
@@ -319,7 +384,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
                 this.jumpPhase = 'landing';
                 this.currentState = 'LANDING';
                 this.playCharacterAnim('jump_land', false);
-                
+
                 // After landing animation, return to idle
                 this.scene.time.delayedCall(200, () => {
                     if (this.currentState === 'LANDING') {
@@ -353,30 +418,30 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
             this.jumpPhase = 'none';
         }
     }
-    
+
     performAirAttack(type: 'air_punch' | 'air_kick', time: number) {
         this.currentState = 'AIR_ATTACK';
         this.lastAttackType = type;
         this.lastAttackTime = time;
-        
+
         // Air attacks have shorter timings
         const startup = 50;
         const activeWindow = 180;
         const recovery = 250;
-        
+
         // Try to play jab animation for air attacks (or use what's available)
         this.playCharacterAnim('jab', false);
-        
+
         this.scene.time.delayedCall(startup, () => {
             if ((this.currentState === 'AIR_ATTACK' || this.currentState === 'JUMP') && this.attackBox.body) {
                 (this.attackBox.body as Phaser.Physics.Arcade.Body).enable = true;
             }
         });
-        
+
         this.scene.time.delayedCall(startup + activeWindow, () => {
             if (this.attackBox.body) (this.attackBox.body as Phaser.Physics.Arcade.Body).enable = false;
         });
-        
+
         this.scene.time.delayedCall(recovery, () => {
             if (this.currentState === 'AIR_ATTACK') {
                 this.currentState = this.isAirborne ? 'JUMP' : 'IDLE';
@@ -384,7 +449,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
             }
         });
     }
-    
+
     performAttack(type: 'punch' | 'kick' | 'jab', time: number) {
         this.currentState = 'ATTACK';
         this.setVelocityX(0);
@@ -395,17 +460,18 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
         this.playCharacterAnim(type, false);
 
         // Timings differ by attack type (startup, active window, recovery)
-        let startup = 100;
-        let activeWindow = 200;
-        let recovery = 400;
+        // Snappier timings for more responsive combat
+        let startup = 80;
+        let activeWindow = 180;
+        let recovery = 350;
         if (type === 'jab') {
-            startup = 60;
-            activeWindow = 140;
-            recovery = 250; // Faster recovery for combo potential
+            startup = 45;          // Very fast jab startup
+            activeWindow = 120;    // Short but effective
+            recovery = 180;        // Quick recovery for combos
         } else if (type === 'kick') {
-            startup = 140;
-            activeWindow = 260;
-            recovery = 500;
+            startup = 110;         // Faster kick startup
+            activeWindow = 220;    // Good active frames
+            recovery = 420;        // Reasonable recovery
         }
 
         // Enable hitbox after startup frames
@@ -436,11 +502,11 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
         this.setTint(0xffaa00);
         if (this.attackBox.body) (this.attackBox.body as Phaser.Physics.Arcade.Body).enable = false;
     }
-    
+
     resetCombo() {
         this.comboCount = 0;
     }
-    
+
     incrementCombo(time: number) {
         if (time - this.lastHitTime < this.comboTimer) {
             this.comboCount++;
@@ -453,7 +519,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     takeDamage(amount: number, _time: number = 0, knockbackX: number = 0, knockbackY: number = 0) {
         // Invincibility check
         if (this.invincible) return;
-        
+
         // Reduce damage if blocking
         if (this.isBlocking) {
             amount = Math.floor(amount * 0.15); // Only take 15% damage when blocking
@@ -464,18 +530,24 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
             });
             // Small pushback when blocking
             const direction = knockbackX > 0 ? 1 : -1;
-            this.setVelocityX(direction * 80);
+            this.setVelocityX(direction * 120);
+            // Build burst meter when blocking
+            this.burstMeter = Math.min(this.maxBurstMeter, this.burstMeter + amount * 2);
             return;
         }
-        
+
         this.hp -= amount;
-        
+
+        // Build burst meter when taking damage (more when taking combos)
+        this.burstMeter = Math.min(this.maxBurstMeter, this.burstMeter + amount * 3);
+        this.canBurst = this.burstMeter >= this.burstCost;
+
         // Start invincibility frames
         this.invincible = true;
         this.scene.time.delayedCall(this.invincibilityDuration, () => {
             this.invincible = false;
         });
-        
+
         if (this.hp <= 0) {
             this.hp = 0;
             this.currentState = 'KO';
@@ -484,9 +556,141 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
             this.setVelocity(knockbackX * 1.5, -400);
             if (this.attackBox.body) (this.attackBox.body as Phaser.Physics.Arcade.Body).enable = false;
         } else {
-            // Calculate hitstun based on damage
-            const hitstun = 150 + (amount * 10);
-            this.applyHitstun(hitstun, knockbackX, knockbackY);
+            // Calculate hitstun based on damage - reduced base hitstun for better counterplay
+            // Also scales down with combo count to prevent infinite combos
+            const baseHitstun = 120 + (amount * 8);
+            const hitstun = Math.max(80, baseHitstun * 0.85); // Cap minimum hitstun
+
+            // Increase horizontal knockback for more spacing, but keep vertical minimal
+            const adjustedKnockbackX = knockbackX * 1.25;
+            const adjustedKnockbackY = Math.min(knockbackY * 0.6, -50); // Reduce vertical knockback significantly
+
+            this.applyHitstun(hitstun, adjustedKnockbackX, adjustedKnockbackY);
+
+            // Enable tech recovery window after a brief delay
+            this.canTechRecover = false;
+            this.scene.time.delayedCall(this.techRecoveryWindow, () => {
+                if (this.currentState === 'HITSTUN') {
+                    this.canTechRecover = true;
+                }
+            });
         }
+    }
+
+    // Perform burst to break out of combo
+    private performBurst() {
+        this.burstMeter = 0;
+        this.canBurst = false;
+        this.currentState = 'IDLE';
+        this.hitstunRemaining = 0;
+        this.clearTint();
+
+        // Push away attacker and become invincible
+        this.invincible = true;
+        this.scene.time.delayedCall(400, () => {
+            this.invincible = false;
+        });
+
+        // Visual burst effect
+        this.showBurstEffect();
+
+        // Strong pushback in both directions
+        const pushDirection = this.facingRight ? -1 : 1;
+        this.setVelocity(pushDirection * 300, -200);
+    }
+
+    private showBurstEffect() {
+        // Create expanding ring effect
+        const ring = this.scene.add.circle(this.x, this.y - this.displayHeight / 2, 20, 0xffff00, 0.8);
+        ring.setStrokeStyle(4, 0xffffff);
+
+        this.scene.tweens.add({
+            targets: ring,
+            scaleX: 8,
+            scaleY: 8,
+            alpha: 0,
+            duration: 400,
+            ease: 'Power2',
+            onComplete: () => ring.destroy()
+        });
+
+        // Flash effect
+        this.setTint(0xffffff);
+        this.scene.time.delayedCall(100, () => {
+            this.clearTint();
+        });
+
+        // Screen shake
+        this.scene.cameras.main.shake(150, 0.015);
+
+        // Burst text
+        const burstText = this.scene.add.text(this.x, this.y - this.displayHeight - 30, 'BURST!', {
+            fontFamily: '"Press Start 2P", cursive',
+            fontSize: '24px',
+            color: '#ffff00',
+            stroke: '#000',
+            strokeThickness: 4
+        }).setOrigin(0.5);
+
+        this.scene.tweens.add({
+            targets: burstText,
+            y: burstText.y - 50,
+            alpha: 0,
+            duration: 600,
+            ease: 'Power2',
+            onComplete: () => burstText.destroy()
+        });
+    }
+
+    private showTechEffect() {
+        // Quick flash and text
+        const techText = this.scene.add.text(this.x, this.y - this.displayHeight - 20, 'TECH!', {
+            fontFamily: '"Press Start 2P", cursive',
+            fontSize: '16px',
+            color: '#00ffff',
+            stroke: '#000',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+
+        this.scene.tweens.add({
+            targets: techText,
+            y: techText.y - 30,
+            alpha: 0,
+            duration: 400,
+            ease: 'Power2',
+            onComplete: () => techText.destroy()
+        });
+
+        // Brief cyan flash
+        this.setTint(0x00ffff);
+        this.scene.time.delayedCall(80, () => {
+            this.clearTint();
+        });
+    }
+
+    // Get stale move multiplier - repeated attacks do less damage
+    public getStaleMoveMultiplier(attackType: string): number {
+        const count = this.recentAttacks.filter(a => a === attackType).length;
+        // Each repeat reduces damage by 10%, min 50%
+        return Math.max(0.5, 1 - (count * 0.1));
+    }
+
+    // Track attack for stale move scaling
+    public trackAttack(attackType: string) {
+        this.recentAttacks.push(attackType);
+        if (this.recentAttacks.length > this.maxRecentAttacks) {
+            this.recentAttacks.shift();
+        }
+    }
+
+    // Reset stale moves (called at round start)
+    public resetStaleMoves() {
+        this.recentAttacks = [];
+    }
+
+    // Reset burst meter (called at round start)
+    public resetBurstMeter() {
+        this.burstMeter = 0;
+        this.canBurst = false;
     }
 }

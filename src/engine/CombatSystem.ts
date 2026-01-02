@@ -20,13 +20,13 @@ export class CombatSystem {
         air_kick: 12
     };
     
-    // Knockback values per attack
+    // Knockback values per attack - reduced vertical for grounded gameplay
     private knockback: Record<string, { x: number, y: number }> = {
-        jab: { x: 120, y: -80 },
-        punch: { x: 200, y: -150 },
-        kick: { x: 280, y: -200 },
-        air_punch: { x: 150, y: 100 }, // Spike down in air
-        air_kick: { x: 200, y: 150 }
+        jab: { x: 130, y: -30 },
+        punch: { x: 180, y: -60 },
+        kick: { x: 250, y: -80 },
+        air_punch: { x: 150, y: 80 }, // Spike down in air
+        air_kick: { x: 180, y: 100 }
     };
 
     constructor(scene: Phaser.Scene, fighters: Fighter[]) {
@@ -117,9 +117,14 @@ export class CombatSystem {
         // Calculate base damage
         let damage = this.baseDamage[attackType] || 10;
         
-        // Combo damage scaling (damage reduces with combo length)
+        // Apply stale move scaling (repeated attacks do less damage)
+        const staleMultiplier = attacker.getStaleMoveMultiplier(attackType);
+        damage = Math.ceil(damage * staleMultiplier);
+        attacker.trackAttack(attackType);
+        
+        // Combo damage scaling (damage reduces with combo length) - more aggressive scaling
         attacker.incrementCombo(time);
-        const comboScaling = Math.max(0.5, 1 - (attacker.comboCount - 1) * 0.1);
+        const comboScaling = Math.max(0.4, 1 - (attacker.comboCount - 1) * 0.12);
         damage = Math.ceil(damage * comboScaling);
         
         // Counter hit bonus (hit during opponent's attack startup)
@@ -128,10 +133,12 @@ export class CombatSystem {
             this.showCounterHit(defender.x, defender.y);
         }
         
-        // Calculate knockback direction
+        // Calculate knockback direction - increased base knockback for more spacing
         const direction = attacker.x < defender.x ? 1 : -1;
         const kb = this.knockback[attackType] || { x: 150, y: -100 };
-        const knockbackX = kb.x * direction;
+        // Increase knockback as combo goes on to eventually push them out
+        const comboKnockbackMultiplier = 1 + (attacker.comboCount * 0.08);
+        const knockbackX = kb.x * direction * comboKnockbackMultiplier;
         const knockbackY = kb.y;
         
         // Apply damage with knockback

@@ -1,50 +1,87 @@
 import { Fighter } from './Fighter';
 import { InputMap } from './InputManager';
 
-type AIState = 'AGGRESSIVE' | 'DEFENSIVE' | 'NEUTRAL' | 'PUNISH' | 'RETREAT';
+type AIState = 'AGGRESSIVE' | 'DEFENSIVE' | 'NEUTRAL' | 'PUNISH' | 'RETREAT' | 'PRESSURE' | 'SETUP';
 
 export class AIController {
     private me: Fighter;
     private target: Fighter;
     private nextActionTime: number = 0;
     private currentInput: InputMap;
-    
+
     // AI State machine
     private aiState: AIState = 'NEUTRAL';
     private stateTimer: number = 0;
-    
-    // Difficulty settings (0-1)
-    private difficulty: number = 0.7;
-    // private reactionTime: number = 150; // Reserved for future use
-    
+    private stateChangeCooldown: number = 0;
+
+    // Difficulty settings (0-1, higher = harder)
+    private difficulty: number = 0.85;
+    private reactionSpeed: number = 100; // ms to react to opponent actions
+
     // Combat awareness
     private lastTargetState: string = 'IDLE';
-    // private targetAttackDetectedTime: number = 0; // Reserved for future use
-    
-    // Spacing preferences
-    private optimalRange: number = 80; // Ideal distance for attacks
-    private safeRange: number = 150; // Distance to maintain when defensive
-    
-    // Decision weights
-    // private aggressionLevel: number = 0.5; // Reserved for future use
-    
-    // Anti-spam
-    private consecutiveAttacks: number = 0;
-    private maxConsecutiveAttacks: number = 3;
+    private targetAttackStartTime: number = 0;
+    private blockHoldTime: number = 0;
+    private lastTargetX: number = 0;
+    private targetMovingTowards: boolean = false;
 
-    constructor(me: Fighter, target: Fighter, difficulty: number = 0.7) {
+    // Combo tracking
+    private comboSequence: string[] = [];
+    private comboTimer: number = 0;
+    private inCombo: boolean = false;
+
+    // Spacing preferences
+    private optimalRange: number = 75;
+    private jabRange: number = 55;
+    private pokeRange: number = 100;
+    private safeRange: number = 140;
+
+    // Anti-spam and variety
+    private consecutiveAttacks: number = 0;
+    private maxConsecutiveAttacks: number = 4;
+    private lastAttackType: string = '';
+    private attackVarietyCounter: { [key: string]: number } = { jab: 0, punch: 0, kick: 0 };
+
+    // Pressure and mixup
+    private pressureLevel: number = 0;
+    private mixupChoice: number = 0;
+    private frameAdvantage: boolean = false;
+
+    // Pattern recognition (track player habits)
+    private playerBlocksHigh: number = 0;
+    private playerBlocksLow: number = 0;
+    private playerJumpsOften: boolean = false;
+    private playerAttackFrequency: number = 0;
+    private playerDashForward: number = 0;
+
+    constructor(me: Fighter, target: Fighter, difficulty: number = 0.85) {
         this.me = me;
         this.target = target;
-        this.difficulty = difficulty;
+        this.difficulty = Math.min(1, Math.max(0.5, difficulty));
+        this.reactionSpeed = 150 - (this.difficulty * 100); // 50-100ms reaction at high difficulty
         this.currentInput = this.getEmptyInput();
     }
 
     update(time: number): InputMap {
+        // Track opponent movement patterns
+        this.analyzeOpponent(time);
+
         // Update AI state based on situation
         this.updateAIState(time);
-        
+
+        // Process combo if in one
+        if (this.inCombo && time < this.comboTimer) {
+            return this.executeCombo(time);
+        }
+
         // Throttle decision making for more human-like behavior
         if (time < this.nextActionTime) {
+            // But still allow reactive blocking
+            if (this.shouldReactBlock(time)) {
+                this.currentInput.block = true;
+                this.currentInput.left = false;
+                this.currentInput.right = false;
+            }
             return this.currentInput;
         }
 
@@ -54,15 +91,17 @@ export class AIController {
         const distance = this.getDistance();
         const targetIsAttacking = this.target.currentState === 'ATTACK' || this.target.currentState === 'AIR_ATTACK';
         const targetIsVulnerable = this.target.currentState === 'HITSTUN' || this.target.currentState === 'STUNNED';
+        const targetIsRecovering = this.target.currentState === 'LANDING';
         const iAmAirborne = this.me.isAirborne;
         const targetIsAirborne = this.target.isAirborne;
-        
-        // Detect target attack for reactions
+        const meBlocking = this.me.isBlocking;
+
+        // Detect target attack start for reactions
         if (targetIsAttacking && this.lastTargetState !== 'ATTACK' && this.lastTargetState !== 'AIR_ATTACK') {
-            // Attack detected - could use for reaction timing
+            this.targetAttackStartTime = time;
         }
         this.lastTargetState = this.target.currentState;
-        
+
         // Execute behavior based on AI state
         switch (this.aiState) {
             case 'AGGRESSIVE':
@@ -72,231 +111,552 @@ export class AIController {
                 this.executeDefensive(distance, time, targetIsAttacking);
                 break;
             case 'PUNISH':
-                this.executePunish(distance, targetIsVulnerable);
+                this.executePunish(distance, time, targetIsVulnerable);
                 break;
             case 'RETREAT':
                 this.executeRetreat(distance);
                 break;
+            case 'PRESSURE':
+                this.executePressure(distance, time, meBlocking);
+                break;
+            case 'SETUP':
+                this.executeSetup(distance, time);
+                break;
             default:
                 this.executeNeutral(distance, time, targetIsAttacking, targetIsAirborne);
         }
-        
-        // Air behavior
+
+        // Air behavior override
         if (iAmAirborne) {
-            this.handleAirBehavior(distance);
+            this.handleAirBehavior(distance, time);
         }
-        
-        // Anti-air reaction
-        if (targetIsAirborne && !iAmAirborne && distance < 120) {
-            if (Math.random() < this.difficulty * 0.6) {
-                this.currentInput.punch = true; // Anti-air
+
+        // Anti-air reaction - improved timing
+        if (targetIsAirborne && !iAmAirborne && distance < 130 && distance > 30) {
+            const antiAirChance = this.difficulty * 0.75;
+            if (Math.random() < antiAirChance) {
+                // Choose attack based on timing
+                if (this.target.body && (this.target.body as Phaser.Physics.Arcade.Body).velocity.y > 0) {
+                    // Falling - time it well
+                    this.currentInput.punch = true;
+                    this.consecutiveAttacks++;
+                }
             }
+        }
+
+        // Whiff punish - react to opponent's missed attack
+        if (targetIsRecovering && distance < this.optimalRange) {
+            this.startCombo(['jab', 'punch', 'kick'], time);
         }
 
         // Randomize next decision time for more human-like behavior
-        const baseDelay = 80 + (1 - this.difficulty) * 120;
-        this.nextActionTime = time + baseDelay + Math.random() * 100;
+        const baseDelay = 60 + (1 - this.difficulty) * 80;
+        this.nextActionTime = time + baseDelay + Math.random() * 60;
 
         return this.currentInput;
     }
-    
+
+    private analyzeOpponent(time: number) {
+        // Track if opponent is approaching
+        const currentTargetX = this.target.x;
+        const distanceToMe = Math.abs(this.me.x - this.target.x);
+        const prevDistance = Math.abs(this.me.x - this.lastTargetX);
+
+        this.targetMovingTowards = distanceToMe < prevDistance;
+        this.lastTargetX = currentTargetX;
+
+        // Track attack frequency
+        if (this.target.currentState === 'ATTACK') {
+            this.playerAttackFrequency++;
+        }
+
+        // Decay frequency counter
+        if (time % 1000 < 20) {
+            this.playerAttackFrequency = Math.max(0, this.playerAttackFrequency - 1);
+        }
+
+        // Track jumping habits
+        if (this.target.isAirborne && !this.target.currentState.includes('HITSTUN')) {
+            this.playerJumpsOften = true;
+        }
+    }
+
+    private shouldReactBlock(time: number): boolean {
+        const targetIsAttacking = this.target.currentState === 'ATTACK' || this.target.currentState === 'AIR_ATTACK';
+        const distance = this.getDistance();
+
+        if (!targetIsAttacking || distance > 120) return false;
+
+        // React after reaction speed delay
+        const timeSinceAttack = time - this.targetAttackStartTime;
+        if (timeSinceAttack > this.reactionSpeed && timeSinceAttack < 500) {
+            return Math.random() < this.difficulty * 0.9;
+        }
+        return false;
+    }
+
     private updateAIState(time: number) {
+        if (time < this.stateChangeCooldown) return;
+
         const hpPercent = this.me.hp / this.me.maxHp;
         const targetHpPercent = this.target.hp / this.target.maxHp;
-        
-        // State transitions based on situation
+        const distance = this.getDistance();
+
+        // Priority state transitions
         if (this.target.currentState === 'HITSTUN' || this.target.currentState === 'STUNNED') {
             this.aiState = 'PUNISH';
             this.consecutiveAttacks = 0;
-        } else if (hpPercent < 0.3 && targetHpPercent > 0.5) {
-            // Low health, play more carefully
-            this.aiState = Math.random() < 0.7 ? 'DEFENSIVE' : 'RETREAT';
-        } else if (hpPercent > targetHpPercent + 0.3) {
-            // Winning - be more aggressive
-            this.aiState = 'AGGRESSIVE';
-        } else if (time > this.stateTimer) {
-            // Random state changes
+            this.stateChangeCooldown = time + 300;
+            return;
+        }
+
+        // If we have frame advantage, go to pressure
+        if (this.frameAdvantage && distance < this.optimalRange) {
+            this.aiState = 'PRESSURE';
+            this.frameAdvantage = false;
+            this.stateChangeCooldown = time + 500;
+            return;
+        }
+
+        // Health-based decisions
+        if (hpPercent < 0.25 && targetHpPercent > 0.4) {
+            // Desperate - mix between aggressive gambles and defensive play
+            this.aiState = Math.random() < 0.4 ? 'AGGRESSIVE' : 'DEFENSIVE';
+            this.stateChangeCooldown = time + 800;
+            return;
+        }
+
+        if (hpPercent < 0.4 && targetHpPercent > 0.6) {
+            // Losing - play smarter
+            this.aiState = Math.random() < 0.6 ? 'DEFENSIVE' : 'NEUTRAL';
+            this.stateChangeCooldown = time + 600;
+            return;
+        }
+
+        if (hpPercent > targetHpPercent + 0.25) {
+            // Winning - maintain pressure but don't get reckless
+            this.aiState = Math.random() < 0.7 ? 'PRESSURE' : 'AGGRESSIVE';
+            this.stateChangeCooldown = time + 700;
+            return;
+        }
+
+        // Near wall - be more aggressive if opponent is cornered
+        if (this.isOpponentNearWall()) {
+            this.aiState = 'PRESSURE';
+            this.stateChangeCooldown = time + 500;
+            return;
+        }
+
+        // Time-based state changes with smarter distribution
+        if (time > this.stateTimer) {
             const r = Math.random();
-            if (r < 0.4) {
+            if (r < 0.35) {
                 this.aiState = 'AGGRESSIVE';
-            } else if (r < 0.6) {
+            } else if (r < 0.5) {
                 this.aiState = 'DEFENSIVE';
+            } else if (r < 0.7) {
+                this.aiState = 'SETUP';
             } else {
                 this.aiState = 'NEUTRAL';
             }
-            this.stateTimer = time + 1000 + Math.random() * 2000;
+            this.stateTimer = time + 800 + Math.random() * 1500;
+            this.stateChangeCooldown = time + 400;
         }
     }
-    
-    private executeAggressive(distance: number, _time: number) {
-        // Move towards optimal range
-        if (distance > this.optimalRange) {
+
+    private executeAggressive(distance: number, time: number) {
+        // Smart approach - dash in when safe
+        if (distance > this.optimalRange * 1.3) {
             this.moveTowardsTarget();
-        } else if (distance < this.optimalRange * 0.5) {
+            // Dash with double-tap or jump-in
+            if (distance > 180 && Math.random() < 0.04 * this.difficulty) {
+                this.currentInput.jump = true;
+            }
+        } else if (distance < this.jabRange * 0.6) {
+            // Too close - create space for optimal attack
             this.moveAwayFromTarget();
         }
-        
+
         // Attack when in range
-        if (distance < this.optimalRange * 1.2 && this.consecutiveAttacks < this.maxConsecutiveAttacks) {
-            this.selectAttack(distance);
+        if (distance < this.optimalRange * 1.1 && this.consecutiveAttacks < this.maxConsecutiveAttacks) {
+            // Start a combo instead of single attacks
+            if (!this.inCombo && Math.random() < 0.6 * this.difficulty) {
+                this.startCombo(['jab', 'jab', 'punch'], time);
+            } else {
+                this.selectAttack(distance);
+            }
         }
-        
-        // Occasional jump-in attack
-        if (distance > 100 && distance < 200 && Math.random() < 0.02 * this.difficulty) {
+
+        // Calculated jump-in attack
+        if (distance > 120 && distance < 200 && Math.random() < 0.025 * this.difficulty) {
             this.currentInput.jump = true;
+            this.moveTowardsTarget();
         }
     }
-    
-    private executeDefensive(distance: number, _time: number, targetIsAttacking: boolean) {
-        // Maintain safe distance
-        if (distance < this.safeRange) {
+
+    private executeDefensive(distance: number, time: number, targetIsAttacking: boolean) {
+        // Maintain safe distance but don't run away too much
+        if (distance < this.safeRange * 0.7) {
             this.moveAwayFromTarget();
+        } else if (distance > this.safeRange * 1.2) {
+            // Don't let them control the whole screen
+            this.moveTowardsTarget();
         }
-        
-        // Block when target attacks
-        if (targetIsAttacking && distance < 120) {
-            if (Math.random() < this.difficulty * 0.8) {
+
+        // Intelligent blocking
+        if (targetIsAttacking && distance < 110) {
+            const timeSinceAttack = time - this.targetAttackStartTime;
+            if (timeSinceAttack > this.reactionSpeed) {
                 this.currentInput.block = true;
                 this.currentInput.left = false;
                 this.currentInput.right = false;
+                this.blockHoldTime = time + 200 + Math.random() * 100;
             }
         }
-        
-        // Duck under high attacks sometimes
-        if (targetIsAttacking && distance < 100 && Math.random() < 0.2) {
-            this.currentInput.duck = true;
-            this.currentInput.block = false;
+
+        // Hold block for appropriate duration
+        if (time < this.blockHoldTime) {
+            this.currentInput.block = true;
+            this.currentInput.left = false;
+            this.currentInput.right = false;
         }
-        
-        // Counter-attack after blocking
-        if (!targetIsAttacking && distance < this.optimalRange && Math.random() < 0.3) {
-            this.currentInput.jab = true;
+
+        // Counter-attack after successful block (frame advantage)
+        if (!targetIsAttacking && this.me.isBlocking && distance < this.optimalRange) {
+            this.frameAdvantage = true;
+        }
+
+        // Occasional counter-poke
+        if (!targetIsAttacking && !this.target.isAirborne && distance < this.pokeRange) {
+            if (Math.random() < 0.15 * this.difficulty) {
+                this.currentInput.jab = true;
+                this.consecutiveAttacks++;
+            }
         }
     }
-    
-    private executePunish(distance: number, targetIsVulnerable: boolean) {
+
+    private executePunish(distance: number, time: number, targetIsVulnerable: boolean) {
         if (!targetIsVulnerable) {
             this.aiState = 'NEUTRAL';
             return;
         }
-        
-        // Rush in and combo
-        if (distance > this.optimalRange * 0.8) {
+
+        // Rush in if not in range
+        if (distance > this.jabRange) {
             this.moveTowardsTarget();
+            return;
         }
-        
-        // Chain attacks for combo
-        if (distance < this.optimalRange * 1.2) {
-            if (this.consecutiveAttacks < 2) {
-                this.currentInput.jab = true;
-            } else if (this.consecutiveAttacks < 3) {
-                this.currentInput.punch = true;
+
+        // Execute optimal combo based on distance
+        if (!this.inCombo) {
+            if (distance < this.jabRange) {
+                // Close range - max damage combo
+                this.startCombo(['jab', 'jab', 'punch', 'kick'], time);
             } else {
-                this.currentInput.kick = true; // Finisher
+                // Medium range - reliable combo
+                this.startCombo(['punch', 'kick'], time);
             }
-            this.consecutiveAttacks++;
         }
     }
-    
-    private executeRetreat(_distance: number) {
+
+    private executePressure(distance: number, time: number, meBlocking: boolean) {
+        // Apply offensive pressure with mixups
+        if (distance > this.jabRange) {
+            this.moveTowardsTarget();
+        }
+
+        // Don't pressure while blocking
+        if (meBlocking) return;
+
+        // Mixup attacks based on choice
+        if (!this.inCombo && distance < this.optimalRange) {
+            this.mixupChoice = (this.mixupChoice + 1) % 4;
+
+            switch (this.mixupChoice) {
+                case 0:
+                    // Jab pressure string
+                    this.startCombo(['jab', 'jab'], time);
+                    break;
+                case 1:
+                    // Delayed heavy
+                    this.startCombo(['jab', 'punch'], time);
+                    break;
+                case 2:
+                    // Low threat (duck + attack would be ideal)
+                    this.currentInput.kick = true;
+                    this.consecutiveAttacks++;
+                    break;
+                case 3:
+                    // Throw attempt / reset
+                    this.moveAwayFromTarget();
+                    this.pressureLevel = 0;
+                    break;
+            }
+            this.pressureLevel++;
+
+            // Reset pressure after several attempts to avoid predictability
+            if (this.pressureLevel > 3) {
+                this.aiState = 'NEUTRAL';
+                this.pressureLevel = 0;
+            }
+        }
+    }
+
+    private executeSetup(distance: number, time: number) {
+        // Positioning and waiting for openings
+        const idealDistance = this.optimalRange * 1.1;
+
+        if (Math.abs(distance - idealDistance) > 30) {
+            if (distance > idealDistance) {
+                this.moveTowardsTarget();
+            } else {
+                this.moveAwayFromTarget();
+            }
+        } else {
+            // At ideal distance - feint and probe
+            if (Math.random() < 0.02) {
+                // Fake approach
+                this.moveTowardsTarget();
+            }
+
+            // Poke with long range attack
+            if (Math.random() < 0.08 * this.difficulty) {
+                this.currentInput.kick = true;
+                this.consecutiveAttacks++;
+            }
+        }
+
+        // Jump over projectiles / read opponent (if they're idle too long)
+        if (this.target.currentState === 'IDLE' && Math.random() < 0.02) {
+            this.currentInput.jump = true;
+            this.moveTowardsTarget();
+        }
+
+        // Transition to aggression if setup takes too long
+        if (Math.random() < 0.01) {
+            this.aiState = 'AGGRESSIVE';
+        }
+    }
+
+    private executeRetreat(distance: number) {
         // Get away
         this.moveAwayFromTarget();
-        
-        // Jump away
-        if (Math.random() < 0.03) {
+
+        // Jump away occasionally
+        if (Math.random() < 0.04) {
             this.currentInput.jump = true;
         }
-        
+
         // Block if cornered
         if (this.isNearWall()) {
             this.currentInput.block = true;
             this.currentInput.left = false;
             this.currentInput.right = false;
+
+            // Try to jump out when safe
+            if (!this.target.isAirborne && distance > 80) {
+                this.currentInput.jump = true;
+                this.currentInput.block = false;
+            }
+        }
+
+        // Counter if opponent overextends
+        if (distance < this.jabRange && Math.random() < 0.3 * this.difficulty) {
+            this.currentInput.jab = true;
+            this.currentInput.block = false;
         }
     }
-    
-    private executeNeutral(distance: number, _time: number, targetIsAttacking: boolean, _targetIsAirborne: boolean) {
-        // Footsies - move in and out
-        if (distance > this.optimalRange * 1.5) {
-            this.moveTowardsTarget();
-        } else if (distance < this.optimalRange * 0.7) {
-            this.moveAwayFromTarget();
-        } else {
-            // Subtle movement
-            if (Math.random() < 0.3) {
+
+    private executeNeutral(distance: number, time: number, targetIsAttacking: boolean, targetIsAirborne: boolean) {
+        // Smart footsies - maintain optimal spacing
+        const targetDistance = this.optimalRange * 1.2;
+
+        if (Math.abs(distance - targetDistance) > 40) {
+            if (distance > targetDistance) {
                 this.moveTowardsTarget();
-            } else if (Math.random() < 0.3) {
+            } else {
                 this.moveAwayFromTarget();
             }
-        }
-        
-        // Whiff punish - attack when target misses
-        if (!targetIsAttacking && this.target.currentState === 'ATTACK' && distance < this.optimalRange) {
-            // Target just finished attack
-            this.currentInput.punch = true;
-        }
-        
-        // Poke at range
-        if (distance > 60 && distance < 100 && Math.random() < 0.05 * this.difficulty) {
-            this.currentInput.kick = true;
-        }
-        
-        // Random jump
-        if (Math.random() < 0.01) {
-            this.currentInput.jump = true;
-        }
-    }
-    
-    private handleAirBehavior(distance: number) {
-        // Air attacks when close
-        if (distance < 100 && Math.random() < 0.4) {
-            if (Math.random() < 0.5) {
-                this.currentInput.punch = true;
-            } else {
-                this.currentInput.kick = true;
+        } else {
+            // Micro-adjustments at range
+            if (Math.random() < 0.15) {
+                if (Math.random() < 0.5) {
+                    this.moveTowardsTarget();
+                } else {
+                    this.moveAwayFromTarget();
+                }
             }
         }
-        
-        // Air control towards/away from target
-        if (this.me.y < this.target.y - 50) {
-            // Above target
+
+        // React to approaches
+        if (this.targetMovingTowards && distance < this.pokeRange) {
+            if (Math.random() < 0.25 * this.difficulty) {
+                this.currentInput.jab = true; // Check approach
+                this.consecutiveAttacks++;
+            }
+        }
+
+        // Anti-air preparation
+        if (targetIsAirborne && distance < 150) {
+            // Wait for them to fall into anti-air range
+            if (this.target.body && (this.target.body as Phaser.Physics.Arcade.Body).velocity.y > 50) {
+                this.currentInput.punch = true;
+            }
+        }
+
+        // Whiff punish attempt
+        if (targetIsAttacking && distance > this.optimalRange && distance < 130) {
+            // They whiffed - prepare to punish
+            this.moveTowardsTarget();
+        }
+
+        // Random poke at good range
+        if (distance > 70 && distance < 110 && Math.random() < 0.04 * this.difficulty) {
+            this.currentInput.kick = true;
+            this.consecutiveAttacks++;
+        }
+
+        // Occasional strategic jump
+        if (Math.random() < 0.008 && !targetIsAirborne) {
+            this.currentInput.jump = true;
             this.moveTowardsTarget();
         }
     }
-    
-    private selectAttack(distance: number) {
-        const r = Math.random();
-        
-        if (distance < 50) {
-            // Very close - fast attacks
-            if (r < 0.6) {
-                this.currentInput.jab = true;
-            } else if (r < 0.85) {
-                this.currentInput.punch = true;
-            } else {
-                this.currentInput.kick = true;
-            }
-        } else if (distance < 80) {
-            // Medium range
-            if (r < 0.3) {
-                this.currentInput.jab = true;
-            } else if (r < 0.7) {
-                this.currentInput.punch = true;
-            } else {
-                this.currentInput.kick = true;
-            }
-        } else {
-            // Longer range - use kick
-            if (r < 0.2) {
-                this.currentInput.punch = true;
-            } else {
-                this.currentInput.kick = true;
+
+    private handleAirBehavior(distance: number, time: number) {
+        // Determine if this is an offensive or defensive jump
+        const myVelocityY = this.me.body ? (this.me.body as Phaser.Physics.Arcade.Body).velocity.y : 0;
+
+        // Air attacks when close and falling
+        if (distance < 90 && myVelocityY > 0) {
+            // Timing attack for when we'll land
+            if (Math.random() < 0.5 * this.difficulty) {
+                if (distance < 50) {
+                    this.currentInput.punch = true;
+                } else {
+                    this.currentInput.kick = true;
+                }
             }
         }
-        
+
+        // Air control - always try to position well
+        if (this.me.y < this.target.y + 50) {
+            this.moveTowardsTarget();
+        }
+
+        // Empty jump to bait anti-airs
+        if (Math.random() < 0.2) {
+            // Don't attack - just land
+        }
+    }
+
+    // Combo system
+    private startCombo(sequence: string[], time: number) {
+        this.comboSequence = sequence;
+        this.inCombo = true;
+        this.comboTimer = time + sequence.length * 180; // rough combo duration
+    }
+
+    private executeCombo(time: number): InputMap {
+        this.currentInput = this.getEmptyInput();
+
+        if (this.comboSequence.length === 0) {
+            this.inCombo = false;
+            this.frameAdvantage = true; // Assume we have advantage after combo
+            return this.currentInput;
+        }
+
+        const distance = this.getDistance();
+
+        // Move towards target during combo
+        if (distance > this.jabRange) {
+            this.moveTowardsTarget();
+        }
+
+        // Pop next attack from combo
+        const nextAttack = this.comboSequence.shift();
+        if (nextAttack && distance < this.optimalRange) {
+            switch (nextAttack) {
+                case 'jab':
+                    this.currentInput.jab = true;
+                    break;
+                case 'punch':
+                    this.currentInput.punch = true;
+                    break;
+                case 'kick':
+                    this.currentInput.kick = true;
+                    break;
+            }
+            this.consecutiveAttacks++;
+            this.lastAttackType = nextAttack;
+        }
+
+        // Check if combo is over
+        if (this.comboSequence.length === 0) {
+            this.inCombo = false;
+            this.frameAdvantage = true;
+        }
+
+        return this.currentInput;
+    }
+
+    private selectAttack(distance: number) {
+        const r = Math.random();
+        let attack: string;
+
+        if (distance < this.jabRange) {
+            // Very close - fast attacks dominate
+            if (r < 0.55) {
+                attack = 'jab';
+            } else if (r < 0.85) {
+                attack = 'punch';
+            } else {
+                attack = 'kick';
+            }
+        } else if (distance < this.optimalRange) {
+            // Medium range - balanced
+            if (r < 0.35) {
+                attack = 'jab';
+            } else if (r < 0.65) {
+                attack = 'punch';
+            } else {
+                attack = 'kick';
+            }
+        } else {
+            // Longer range - use kick to poke
+            if (r < 0.15) {
+                attack = 'punch';
+            } else {
+                attack = 'kick';
+            }
+        }
+
+        // Avoid repeating the same attack too much
+        if (attack === this.lastAttackType && this.attackVarietyCounter[attack] > 2) {
+            // Pick something else
+            const options = ['jab', 'punch', 'kick'].filter(a => a !== attack);
+            attack = options[Math.floor(Math.random() * options.length)];
+            this.attackVarietyCounter = { jab: 0, punch: 0, kick: 0 };
+        }
+
+        this.attackVarietyCounter[attack] = (this.attackVarietyCounter[attack] || 0) + 1;
+        this.lastAttackType = attack;
+
+        switch (attack) {
+            case 'jab':
+                this.currentInput.jab = true;
+                break;
+            case 'punch':
+                this.currentInput.punch = true;
+                break;
+            case 'kick':
+                this.currentInput.kick = true;
+                break;
+        }
+
         this.consecutiveAttacks++;
     }
-    
+
     private moveTowardsTarget() {
         if (this.me.x < this.target.x) {
             this.currentInput.right = true;
@@ -304,7 +664,7 @@ export class AIController {
             this.currentInput.left = true;
         }
     }
-    
+
     private moveAwayFromTarget() {
         if (this.me.x < this.target.x) {
             this.currentInput.left = true;
@@ -312,20 +672,24 @@ export class AIController {
             this.currentInput.right = true;
         }
     }
-    
+
     private getDistance(): number {
         return Math.abs(this.me.x - this.target.x);
     }
-    
+
     private isNearWall(): boolean {
-        return this.me.x < 100 || this.me.x > 1180;
+        return this.me.x < 80 || this.me.x > 1200;
+    }
+
+    private isOpponentNearWall(): boolean {
+        return this.target.x < 100 || this.target.x > 1180;
     }
 
     private getEmptyInput(): InputMap {
-        return { 
-            left: false, right: false, up: false, down: false, 
+        return {
+            left: false, right: false, up: false, down: false,
             jump: false, punch: false, jab: false, kick: false,
-            block: false, duck: false 
+            block: false, duck: false
         };
     }
 }
