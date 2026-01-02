@@ -5,7 +5,7 @@ export class SettingsScene extends Phaser.Scene {
     private settings: SettingsManager;
     private settingsContainer!: Phaser.GameObjects.Container;
     private calledFrom: string = 'TitleScene';
-    private sliderRefs: Map<string, { handle: Phaser.GameObjects.Rectangle, fill: Phaser.GameObjects.Rectangle, text: Phaser.GameObjects.Text }> = new Map();
+    private sliderRefs: Map<string, { handle: Phaser.GameObjects.Rectangle, fill: Phaser.GameObjects.Rectangle, fillHighlight: Phaser.GameObjects.Rectangle, text: Phaser.GameObjects.Text }> = new Map();
 
     constructor() {
         super('SettingsScene');
@@ -38,12 +38,12 @@ export class SettingsScene extends Phaser.Scene {
 
         // === AUDIO SECTION ===
         this.createSectionHeader('AUDIO', startY - 40);
-        
+
         // Show context-aware music slider based on which scene we came from
         if (this.calledFrom === 'BattleScene') {
             // Fight music settings
-            this.createVolumeSlider('FIGHT MUSIC', startY, 'fightMusicVolume', 
-                this.settings.get('fightMusicVolume'), 
+            this.createVolumeSlider('FIGHT MUSIC', startY, 'fightMusicVolume',
+                this.settings.get('fightMusicVolume'),
                 this.settings.get('fightMusicEnabled'),
                 (value) => {
                     this.settings.set('fightMusicVolume', value);
@@ -58,8 +58,8 @@ export class SettingsScene extends Phaser.Scene {
             );
         } else {
             // Title music settings
-            this.createVolumeSlider('TITLE MUSIC', startY, 'titleMusicVolume', 
-                this.settings.get('titleMusicVolume'), 
+            this.createVolumeSlider('TITLE MUSIC', startY, 'titleMusicVolume',
+                this.settings.get('titleMusicVolume'),
                 this.settings.get('titleMusicEnabled'),
                 (value) => {
                     this.settings.set('titleMusicVolume', value);
@@ -105,29 +105,62 @@ export class SettingsScene extends Phaser.Scene {
 
         // === BUTTONS ===
         const buttonY = panelHeight / 2 - 70;
-        
-        // Reset Defaults Button
-        const resetBtn = this.createRetroButton(-100, buttonY, 'RESET', 0xaa4444, () => {
-            this.settings.reset();
-            // update registry to match reset settings so other scenes pick up defaults
-            const all = this.settings.getAll();
-            this.registry.set('titleMusicVolume', all.titleMusicVolume);
-            this.registry.set('titleMusicEnabled', all.titleMusicEnabled);
-            this.registry.set('fightMusicVolume', all.fightMusicVolume);
-            this.registry.set('fightMusicEnabled', all.fightMusicEnabled);
-            this.registry.set('sfxVolume', all.sfxVolume);
-            this.registry.set('sfxEnabled', all.sfxEnabled);
-            this.registry.set('screenShake', all.screenShake);
 
-            this.scene.restart({ calledFrom: this.calledFrom });
-        });
-        this.settingsContainer.add(resetBtn);
+        // Show Quit Fight button only when in battle
+        if (this.calledFrom === 'BattleScene') {
+            // 3 buttons: Reset, Quit, Back
+            const quitBtn = this.createRetroButton(-150, buttonY, 'QUIT', 0xcc6600, () => {
+                // Stop fight music
+                const fightMusic = this.sound.get('fightMusic');
+                if (fightMusic && fightMusic.isPlaying) {
+                    fightMusic.stop();
+                }
+                // Return to title screen
+                this.scene.stop('BattleScene');
+                this.scene.stop();
+                this.scene.start('TitleScene');
+            });
+            this.settingsContainer.add(quitBtn);
 
-        // Back Button
-        const backBtn = this.createRetroButton(100, buttonY, 'BACK', 0x44aa44, () => {
-            this.closeSettings();
-        });
-        this.settingsContainer.add(backBtn);
+            const resetBtn = this.createRetroButton(0, buttonY, 'RESET', 0xaa4444, () => {
+                this.settings.reset();
+                const all = this.settings.getAll();
+                this.registry.set('titleMusicVolume', all.titleMusicVolume);
+                this.registry.set('titleMusicEnabled', all.titleMusicEnabled);
+                this.registry.set('fightMusicVolume', all.fightMusicVolume);
+                this.registry.set('fightMusicEnabled', all.fightMusicEnabled);
+                this.registry.set('sfxVolume', all.sfxVolume);
+                this.registry.set('sfxEnabled', all.sfxEnabled);
+                this.registry.set('screenShake', all.screenShake);
+                this.scene.restart({ calledFrom: this.calledFrom });
+            });
+            this.settingsContainer.add(resetBtn);
+
+            const backBtn = this.createRetroButton(150, buttonY, 'BACK', 0x44aa44, () => {
+                this.closeSettings();
+            });
+            this.settingsContainer.add(backBtn);
+        } else {
+            // 2 buttons: Reset, Back (title screen mode)
+            const resetBtn = this.createRetroButton(-100, buttonY, 'RESET', 0xaa4444, () => {
+                this.settings.reset();
+                const all = this.settings.getAll();
+                this.registry.set('titleMusicVolume', all.titleMusicVolume);
+                this.registry.set('titleMusicEnabled', all.titleMusicEnabled);
+                this.registry.set('fightMusicVolume', all.fightMusicVolume);
+                this.registry.set('fightMusicEnabled', all.fightMusicEnabled);
+                this.registry.set('sfxVolume', all.sfxVolume);
+                this.registry.set('sfxEnabled', all.sfxEnabled);
+                this.registry.set('screenShake', all.screenShake);
+                this.scene.restart({ calledFrom: this.calledFrom });
+            });
+            this.settingsContainer.add(resetBtn);
+
+            const backBtn = this.createRetroButton(100, buttonY, 'BACK', 0x44aa44, () => {
+                this.closeSettings();
+            });
+            this.settingsContainer.add(backBtn);
+        }
 
         // Animate entrance
         this.settingsContainer.setScale(0.8);
@@ -148,72 +181,109 @@ export class SettingsScene extends Phaser.Scene {
 
     private createRetroPanel(panelWidth: number, panelHeight: number) {
         // Outer glow/shadow
-        const shadow = this.add.rectangle(4, 4, panelWidth + 12, panelHeight + 12, 0x000000, 0.5);
-        
-        // Main outer frame
-        const outerFrame = this.add.rectangle(0, 0, panelWidth + 12, panelHeight + 12, 0x0a0a1a);
-        
-        // Metallic border effect
-        const borderTop = this.add.rectangle(0, -panelHeight/2 - 4, panelWidth + 8, 4, 0x8a8aaa);
-        const borderLeft = this.add.rectangle(-panelWidth/2 - 4, 0, 4, panelHeight + 8, 0x8a8aaa);
-        const borderBottom = this.add.rectangle(0, panelHeight/2 + 4, panelWidth + 8, 4, 0x3a3a5a);
-        const borderRight = this.add.rectangle(panelWidth/2 + 4, 0, 4, panelHeight + 8, 0x3a3a5a);
+        const shadow = this.add.rectangle(6, 6, panelWidth + 16, panelHeight + 16, 0x000000, 0.6);
+
+        // Main outer frame with gradient simulation
+        const outerFrame = this.add.rectangle(0, 0, panelWidth + 16, panelHeight + 16, 0x0a0a1a);
+
+        // Metallic border effect - enhanced
+        const borderTop = this.add.rectangle(0, -panelHeight / 2 - 6, panelWidth + 12, 6, 0x9a9aba);
+        const borderLeft = this.add.rectangle(-panelWidth / 2 - 6, 0, 6, panelHeight + 12, 0x9a9aba);
+        const borderBottom = this.add.rectangle(0, panelHeight / 2 + 6, panelWidth + 12, 6, 0x2a2a4a);
+        const borderRight = this.add.rectangle(panelWidth / 2 + 6, 0, 6, panelHeight + 12, 0x2a2a4a);
 
         // Inner panel with gradient simulation
-        const innerPanel = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x1e1e36);
-        
-        // Top highlight
-        const topHighlight = this.add.rectangle(0, -panelHeight/2 + 40, panelWidth - 20, 80, 0x2a2a4a);
-        
-        // Decorative corners
-        const cornerSize = 16;
+        const innerPanel = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x1a1a32);
+
+        // Top highlight gradient
+        const topHighlight = this.add.rectangle(0, -panelHeight / 2 + 45, panelWidth - 24, 90, 0x252548);
+
+        // Side accent lines
+        const accentGraphics = this.add.graphics();
+        accentGraphics.lineStyle(2, 0xffcc00, 0.5);
+        accentGraphics.lineBetween(-panelWidth / 2 + 12, -panelHeight / 2 + 80, -panelWidth / 2 + 12, panelHeight / 2 - 100);
+        accentGraphics.lineBetween(panelWidth / 2 - 12, -panelHeight / 2 + 80, panelWidth / 2 - 12, panelHeight / 2 - 100);
+
+        // Decorative corners - enhanced with more detail
+        const cornerSize = 20;
         const cornerColor = 0xffcc00;
         const corners = [
-            // Top left
-            this.add.rectangle(-panelWidth/2 + cornerSize/2 + 4, -panelHeight/2 + cornerSize/2 + 4, cornerSize, cornerSize, cornerColor),
-            this.add.rectangle(-panelWidth/2 + cornerSize/2 + 4, -panelHeight/2 + cornerSize + 10, cornerSize/2, cornerSize/2, cornerColor),
-            this.add.rectangle(-panelWidth/2 + cornerSize + 10, -panelHeight/2 + cornerSize/2 + 4, cornerSize/2, cornerSize/2, cornerColor),
-            // Top right
-            this.add.rectangle(panelWidth/2 - cornerSize/2 - 4, -panelHeight/2 + cornerSize/2 + 4, cornerSize, cornerSize, cornerColor),
-            this.add.rectangle(panelWidth/2 - cornerSize/2 - 4, -panelHeight/2 + cornerSize + 10, cornerSize/2, cornerSize/2, cornerColor),
-            this.add.rectangle(panelWidth/2 - cornerSize - 10, -panelHeight/2 + cornerSize/2 + 4, cornerSize/2, cornerSize/2, cornerColor),
+            // Top left cluster
+            this.add.rectangle(-panelWidth / 2 + cornerSize / 2 + 6, -panelHeight / 2 + cornerSize / 2 + 6, cornerSize, cornerSize, cornerColor),
+            this.add.rectangle(-panelWidth / 2 + cornerSize / 2 + 6, -panelHeight / 2 + cornerSize + 14, cornerSize / 2, cornerSize / 2, cornerColor),
+            this.add.rectangle(-panelWidth / 2 + cornerSize + 14, -panelHeight / 2 + cornerSize / 2 + 6, cornerSize / 2, cornerSize / 2, cornerColor),
+            this.add.rectangle(-panelWidth / 2 + cornerSize + 20, -panelHeight / 2 + 10, cornerSize / 3, cornerSize / 3, cornerColor),
+            // Top right cluster
+            this.add.rectangle(panelWidth / 2 - cornerSize / 2 - 6, -panelHeight / 2 + cornerSize / 2 + 6, cornerSize, cornerSize, cornerColor),
+            this.add.rectangle(panelWidth / 2 - cornerSize / 2 - 6, -panelHeight / 2 + cornerSize + 14, cornerSize / 2, cornerSize / 2, cornerColor),
+            this.add.rectangle(panelWidth / 2 - cornerSize - 14, -panelHeight / 2 + cornerSize / 2 + 6, cornerSize / 2, cornerSize / 2, cornerColor),
+            this.add.rectangle(panelWidth / 2 - cornerSize - 20, -panelHeight / 2 + 10, cornerSize / 3, cornerSize / 3, cornerColor),
             // Bottom left
-            this.add.rectangle(-panelWidth/2 + cornerSize/2 + 4, panelHeight/2 - cornerSize/2 - 4, cornerSize, cornerSize, cornerColor),
+            this.add.rectangle(-panelWidth / 2 + cornerSize / 2 + 6, panelHeight / 2 - cornerSize / 2 - 6, cornerSize, cornerSize, cornerColor),
+            this.add.rectangle(-panelWidth / 2 + cornerSize + 14, panelHeight / 2 - cornerSize / 2 - 6, cornerSize / 2, cornerSize / 2, cornerColor),
             // Bottom right
-            this.add.rectangle(panelWidth/2 - cornerSize/2 - 4, panelHeight/2 - cornerSize/2 - 4, cornerSize, cornerSize, cornerColor),
+            this.add.rectangle(panelWidth / 2 - cornerSize / 2 - 6, panelHeight / 2 - cornerSize / 2 - 6, cornerSize, cornerSize, cornerColor),
+            this.add.rectangle(panelWidth / 2 - cornerSize - 14, panelHeight / 2 - cornerSize / 2 - 6, cornerSize / 2, cornerSize / 2, cornerColor),
         ];
 
-        // Title bar background
-        const titleBar = this.add.rectangle(0, -panelHeight/2 + 35, panelWidth - 40, 50, 0x0d0d1a);
-        titleBar.setStrokeStyle(2, 0xffcc00);
+        // Add white highlights to corners
+        corners.forEach((corner, index) => {
+            if (index % 4 === 0) { // Main corners only
+                const highlight = this.add.rectangle(corner.x - 3, corner.y - 3, 6, 6, 0xffffff, 0.5);
+                this.settingsContainer.add(highlight);
+            }
+        });
 
-        // Title text
-        const title = this.add.text(0, -panelHeight/2 + 35, '⚙  SETTINGS  ⚙', {
+        // Title bar background with fancy border
+        const titleBarBg = this.add.rectangle(0, -panelHeight / 2 + 35, panelWidth - 36, 56, 0x0d0d1a);
+        const titleBar = this.add.rectangle(0, -panelHeight / 2 + 35, panelWidth - 40, 52, 0x15152a);
+        titleBar.setStrokeStyle(3, 0xffcc00);
+
+        // Title text with shadow
+        const titleShadow = this.add.text(2, -panelHeight / 2 + 37, '⚙  SETTINGS  ⚙', {
+            fontFamily: '"Press Start 2P", monospace',
+            fontSize: '24px',
+            color: '#000000',
+        }).setOrigin(0.5);
+
+        const title = this.add.text(0, -panelHeight / 2 + 35, '⚙  SETTINGS  ⚙', {
             fontFamily: '"Press Start 2P", monospace',
             fontSize: '24px',
             color: '#ffcc00',
             stroke: '#000000',
-            strokeThickness: 4,
+            strokeThickness: 2,
         }).setOrigin(0.5);
 
-        // Decorative line
+        // Decorative line with enhanced styling
         const titleLine = this.add.graphics();
-        titleLine.lineStyle(2, 0xffcc00);
-        titleLine.lineBetween(-panelWidth/2 + 30, -panelHeight/2 + 65, panelWidth/2 - 30, -panelHeight/2 + 65);
-        
-        // Small pixel accents
-        titleLine.fillStyle(0xffcc00);
-        titleLine.fillRect(-panelWidth/2 + 25, -panelHeight/2 + 63, 6, 6);
-        titleLine.fillRect(panelWidth/2 - 31, -panelHeight/2 + 63, 6, 6);
+        titleLine.lineStyle(3, 0xffcc00);
+        titleLine.lineBetween(-panelWidth / 2 + 35, -panelHeight / 2 + 68, panelWidth / 2 - 35, -panelHeight / 2 + 68);
+        titleLine.lineStyle(1, 0x886600);
+        titleLine.lineBetween(-panelWidth / 2 + 35, -panelHeight / 2 + 72, panelWidth / 2 - 35, -panelHeight / 2 + 72);
 
-        this.settingsContainer.add([shadow, outerFrame, borderTop, borderLeft, borderBottom, borderRight, 
-            innerPanel, topHighlight, ...corners, titleBar, title, titleLine]);
+        // Enhanced pixel accents
+        titleLine.fillStyle(0xffcc00);
+        titleLine.fillRect(-panelWidth / 2 + 28, -panelHeight / 2 + 64, 10, 10);
+        titleLine.fillRect(panelWidth / 2 - 38, -panelHeight / 2 + 64, 10, 10);
+        titleLine.fillStyle(0xffffff, 0.6);
+        titleLine.fillRect(-panelWidth / 2 + 29, -panelHeight / 2 + 65, 4, 4);
+        titleLine.fillRect(panelWidth / 2 - 37, -panelHeight / 2 + 65, 4, 4);
+
+        // Scanline effect (subtle)
+        const scanlines = this.add.graphics();
+        scanlines.lineStyle(1, 0x000000, 0.1);
+        for (let i = -panelHeight / 2; i < panelHeight / 2; i += 4) {
+            scanlines.lineBetween(-panelWidth / 2 + 10, i, panelWidth / 2 - 10, i);
+        }
+
+        this.settingsContainer.add([shadow, outerFrame, borderTop, borderLeft, borderBottom, borderRight,
+            innerPanel, topHighlight, accentGraphics, ...corners, titleBarBg, titleBar, titleShadow, title, titleLine, scanlines]);
     }
 
     private createSectionHeader(text: string, yPos: number) {
         const bg = this.add.rectangle(0, yPos, 200, 24, 0x2a2a4a);
         bg.setStrokeStyle(1, 0x4a4a6a);
-        
+
         const label = this.add.text(0, yPos, text, {
             fontFamily: '"Press Start 2P", monospace',
             fontSize: '12px',
@@ -248,37 +318,44 @@ export class SettingsScene extends Phaser.Scene {
 
         // Slider track
         const sliderTrack = this.add.rectangle(0, yPos, sliderWidth, sliderHeight, 0x1a1a2e);
-        
-        // Slider fill (gradient effect with multiple rects)
-        const fillWidth = sliderWidth * initialValue;
+
+        // Slider fill - LEFT-ANCHORED so it fills from left edge to slider value
+        const trackPadding = 2;
+        const maxFillWidth = sliderWidth - (trackPadding * 2);
+        const fillWidth = maxFillWidth * initialValue;
+
+        // Create fill with left-center origin so it grows rightward from fixed left position
         const sliderFill = this.add.rectangle(
-            -sliderWidth/2 + fillWidth/2,
+            -sliderWidth / 2 + trackPadding,  // Fixed left edge position
             yPos,
             fillWidth,
             sliderHeight - 4,
             0xffcc00
         );
-        
-        // Fill highlight
+        sliderFill.setOrigin(0, 0.5);  // Left-center origin
+
+        // Fill highlight - same left-anchored approach
         const fillHighlight = this.add.rectangle(
-            -sliderWidth/2 + fillWidth/2,
-            yPos - 4,
+            -sliderWidth / 2 + trackPadding,  // Same fixed left edge
+            yPos - (sliderHeight - 4) / 2 + 3,
             fillWidth,
             4,
             0xffee88
         );
+        fillHighlight.setOrigin(0, 0.5);  // Left-center origin
 
         // Slider handle
-        const handleX = -sliderWidth/2 + sliderWidth * initialValue;
+        const handleX = -sliderWidth / 2 + sliderWidth * initialValue;
         const sliderHandle = this.add.rectangle(handleX, yPos, 14, sliderHeight + 12, 0xffffff);
         sliderHandle.setStrokeStyle(2, 0x000000);
         sliderHandle.setInteractive({ useHandCursor: true, draggable: true });
 
-        // Volume percentage text
-        const volumeText = this.add.text(sliderWidth/2 + 45, yPos, `${Math.round(initialValue * 100)}%`, {
+        // Volume percentage text - add padding to prevent pixel font clipping
+        const volumeText = this.add.text(sliderWidth / 2 + 45, yPos, `${Math.round(initialValue * 100)}%`, {
             fontFamily: '"Press Start 2P", monospace',
             fontSize: '10px',
             color: '#ffcc00',
+            padding: { top: 2, bottom: 2 }
         }).setOrigin(0.5);
 
         // Toggle button
@@ -294,7 +371,7 @@ export class SettingsScene extends Phaser.Scene {
         }).setOrigin(0.5);
 
         // Store refs for updating
-        this.sliderRefs.set(key, { handle: sliderHandle, fill: sliderFill, text: volumeText });
+        this.sliderRefs.set(key, { handle: sliderHandle, fill: sliderFill, fillHighlight: fillHighlight, text: volumeText });
 
         // Toggle interaction
         toggleBg.on('pointerdown', () => {
@@ -312,7 +389,7 @@ export class SettingsScene extends Phaser.Scene {
         sliderTrack.setInteractive({ useHandCursor: true });
         sliderTrack.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
             const localX = pointer.x - this.settingsContainer.x;
-            const newValue = Phaser.Math.Clamp((localX + sliderWidth/2) / sliderWidth, 0, 1);
+            const newValue = Phaser.Math.Clamp((localX + sliderWidth / 2) / sliderWidth, 0, 1);
             this.updateSliderVisual(key, sliderWidth, newValue);
             onVolumeChange(newValue);
             this.playClickSound();
@@ -321,8 +398,8 @@ export class SettingsScene extends Phaser.Scene {
         // Drag handling
         this.input.on('drag', (_pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.Rectangle, dragX: number) => {
             if (gameObject === sliderHandle) {
-                const newX = Phaser.Math.Clamp(dragX, -sliderWidth/2, sliderWidth/2);
-                const newValue = (newX + sliderWidth/2) / sliderWidth;
+                const newX = Phaser.Math.Clamp(dragX, -sliderWidth / 2, sliderWidth / 2);
+                const newValue = (newX + sliderWidth / 2) / sliderWidth;
                 this.updateSliderVisual(key, sliderWidth, newValue);
                 onVolumeChange(newValue);
             }
@@ -334,11 +411,19 @@ export class SettingsScene extends Phaser.Scene {
     private updateSliderVisual(key: string, sliderWidth: number, value: number) {
         const refs = this.sliderRefs.get(key);
         if (refs) {
-            const fillWidth = sliderWidth * value;
-            refs.handle.x = -sliderWidth/2 + sliderWidth * value;
-            refs.fill.x = -sliderWidth/2 + fillWidth/2;
-            refs.fill.width = Math.max(fillWidth, 1);
-            refs.text.setText(`${Math.round(value * 100)}%`);
+            const clampedValue = Phaser.Math.Clamp(value, 0, 1);
+            const trackPadding = 2;
+            const maxFillWidth = sliderWidth - (trackPadding * 2);
+            const fillWidth = maxFillWidth * clampedValue;
+
+            // Handle position at right edge of fill
+            refs.handle.x = -sliderWidth / 2 + trackPadding + fillWidth;
+
+            // Fill bars just need width updated - position is fixed at left edge via origin
+            refs.fill.width = fillWidth;
+            refs.fillHighlight.width = fillWidth;
+
+            refs.text.setText(`${Math.round(clampedValue * 100)}%`);
         }
     }
 
@@ -359,8 +444,8 @@ export class SettingsScene extends Phaser.Scene {
         toggleTrack.setInteractive({ useHandCursor: true });
 
         // Toggle indicator
-        const indicatorX = isEnabled ? 50 + toggleWidth/4 : 50 - toggleWidth/4;
-        const toggleIndicator = this.add.rectangle(indicatorX, yPos, toggleWidth/2 - 8, toggleHeight - 8, isEnabled ? 0x44aa44 : 0xaa4444);
+        const indicatorX = isEnabled ? 50 + toggleWidth / 4 : 50 - toggleWidth / 4;
+        const toggleIndicator = this.add.rectangle(indicatorX, yPos, toggleWidth / 2 - 8, toggleHeight - 8, isEnabled ? 0x44aa44 : 0xaa4444);
         toggleIndicator.setStrokeStyle(2, 0xffffff);
 
         // Status text
@@ -372,14 +457,14 @@ export class SettingsScene extends Phaser.Scene {
 
         toggleTrack.on('pointerdown', () => {
             isEnabled = !isEnabled;
-            
+
             this.tweens.add({
                 targets: toggleIndicator,
-                x: isEnabled ? 50 + toggleWidth/4 : 50 - toggleWidth/4,
+                x: isEnabled ? 50 + toggleWidth / 4 : 50 - toggleWidth / 4,
                 duration: 100,
                 ease: 'Power2'
             });
-            
+
             toggleIndicator.setFillStyle(isEnabled ? 0x44aa44 : 0xaa4444);
             statusText.setText(isEnabled ? 'ON' : 'OFF');
             onToggle(isEnabled);
@@ -399,14 +484,14 @@ export class SettingsScene extends Phaser.Scene {
 
         // Shadow
         const shadow = this.add.rectangle(3, 3, btnWidth, btnHeight, 0x000000, 0.5);
-        
+
         // Button body
         const body = this.add.rectangle(0, 0, btnWidth, btnHeight, color);
         body.setStrokeStyle(3, 0xffffff);
         body.setInteractive({ useHandCursor: true });
 
         // Highlight
-        const highlight = this.add.rectangle(0, -btnHeight/4, btnWidth - 8, btnHeight/3, 0xffffff, 0.2);
+        const highlight = this.add.rectangle(0, -btnHeight / 4, btnWidth - 8, btnHeight / 3, 0xffffff, 0.2);
 
         // Text
         const btnText = this.add.text(0, 0, text, {
@@ -446,22 +531,22 @@ export class SettingsScene extends Phaser.Scene {
 
     private playClickSound() {
         if (!this.settings.get('sfxEnabled')) return;
-        
+
         try {
             const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
             const oscillator = audioContext.createOscillator();
             const gainNode = audioContext.createGain();
-            
+
             oscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
-            
+
             oscillator.frequency.value = 800;
             oscillator.type = 'square';
-            
+
             const volume = this.settings.get('sfxVolume') * 0.15;
             gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
             gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.08);
-            
+
             oscillator.start(audioContext.currentTime);
             oscillator.stop(audioContext.currentTime + 0.08);
         } catch (e) {
