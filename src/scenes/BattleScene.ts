@@ -191,19 +191,18 @@ export class BattleScene extends Phaser.Scene {
             makeAnim(charName, 'block', 48, 0);
         }
 
-        // Create Fighters (default character name fallback)
-        this.p1CharName = (manifest && manifest.characters && manifest.characters.length > 0) ? manifest.characters[0].name : 'Kevin';
-        this.p2CharName = this.p1CharName;
+        // Only set character names from manifest if they weren't passed from CharacterSelectScene
+        // manifest is already declared above at line 123
 
-        // Prefer Noel for player 2 when available; otherwise use second manifest entry if present
-        if (manifest && manifest.characters) {
-            const noelEntry = manifest.characters.find((c: any) => c.name === 'Noel');
-            if (noelEntry) {
-                this.p2CharName = 'Noel';
-            } else if (manifest.characters.length > 1) {
-                this.p2CharName = manifest.characters[1].name;
-            }
+        if (!this.p1CharName || this.p1CharName === 'P1') {
+            this.p1CharName = (manifest && manifest.characters && manifest.characters.length > 0) ? manifest.characters[0].name : 'Kevin';
         }
+        if (!this.p2CharName || this.p2CharName === 'P2') {
+            this.p2CharName = (manifest && manifest.characters && manifest.characters.length > 1) ? manifest.characters[1].name : 'Noel';
+        }
+
+        console.log(`Starting battle: ${this.p1CharName} vs ${this.p2CharName}`);
+
 
         const getInitialTexture = (charNameParam: string) => {
             let tex = `${charNameParam}_idle`;
@@ -252,7 +251,76 @@ export class BattleScene extends Phaser.Scene {
         // Colliders
         this.physics.add.collider(this.p1, this.floor);
         this.physics.add.collider(this.p2, this.floor);
-        this.physics.add.collider(this.p1, this.p2);
+
+        // Fighter vs Fighter collision with custom handling
+        this.physics.add.collider(this.p1, this.p2, undefined, (p1Obj, p2Obj) => {
+            const p1Fighter = p1Obj as Fighter;
+            const p2Fighter = p2Obj as Fighter;
+            const p1Body = p1Fighter.body as Phaser.Physics.Arcade.Body;
+            const p2Body = p2Fighter.body as Phaser.Physics.Arcade.Body;
+
+            // Prevent standing on top of each other - check if one is above the other
+            const p1Bottom = p1Body.y + p1Body.height;
+            const p2Bottom = p2Body.y + p2Body.height;
+            const p1Top = p1Body.y;
+            const p2Top = p2Body.y;
+
+            // If one fighter is mostly above the other, apply slip-off force
+            if (p1Bottom < p2Top + 20 || p2Bottom < p1Top + 20) {
+                // Someone is on top - push them off horizontally
+                if (p1Fighter.y < p2Fighter.y) {
+                    // P1 is on top of P2 - slip P1 off
+                    const slipDir = p1Fighter.x < p2Fighter.x ? -200 : 200;
+                    p1Fighter.setVelocityX(slipDir);
+                } else {
+                    // P2 is on top of P1 - slip P2 off
+                    const slipDir = p2Fighter.x < p1Fighter.x ? -200 : 200;
+                    p2Fighter.setVelocityX(slipDir);
+                }
+                return false; // Don't collide normally when stacked
+            }
+
+            // Prevent overlapping near walls by pushing apart
+            // Variable declarations removed as they are no longer used
+
+            // Smart Wall Collision: Prevent overlapping when cornered
+            // If one player is against the wall, they act as a solid object
+            const dist = Math.abs(p1Fighter.x - p2Fighter.x);
+            const combinedHalfWidths = (p1Body.width / 2) + (p2Body.width / 2);
+
+            if (dist < combinedHalfWidths) {
+                const overlapAmount = combinedHalfWidths - dist;
+                const p1NearWall = p1Fighter.x < 70 || p1Fighter.x > width - 70;
+                const p2NearWall = p2Fighter.x < 70 || p2Fighter.x > width - 70;
+
+                if (p1NearWall && !p2NearWall) {
+                    // P1 is cornered, P2 is pushing -> Move P2 back
+                    if (p1Fighter.x < p2Fighter.x) p2Fighter.x += overlapAmount;
+                    else p2Fighter.x -= overlapAmount;
+                    p2Fighter.setVelocityX(0); // Stop P2's momentum
+                }
+                else if (p2NearWall && !p1NearWall) {
+                    // P2 is cornered, P1 is pushing -> Move P1 back
+                    if (p2Fighter.x < p1Fighter.x) p1Fighter.x += overlapAmount;
+                    else p1Fighter.x -= overlapAmount;
+                    p1Fighter.setVelocityX(0); // Stop P1's momentum
+                }
+                else if (overlapAmount > 5) {
+                    // Mid-screen overlap correction (prevents merging)
+                    // Split the difference so it doesn't feel like "pushing"
+                    const correction = overlapAmount / 2;
+                    if (p1Fighter.x < p2Fighter.x) {
+                        p1Fighter.x -= correction;
+                        p2Fighter.x += correction;
+                    } else {
+                        p1Fighter.x += correction;
+                        p2Fighter.x -= correction;
+                    }
+                }
+            }
+
+            return true; // Allow normal collision
+        }, this);
 
         // Systems
         this.inputManager = new InputManager(this);

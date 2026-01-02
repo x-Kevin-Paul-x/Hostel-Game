@@ -19,6 +19,11 @@ export class CharacterSelectScene extends Phaser.Scene {
     private fightButton!: Phaser.GameObjects.Container;
     private characterSlots: Map<string, Phaser.GameObjects.Container> = new Map();
 
+    // Keyboard navigation
+    private p1CursorIndex: number = 0;
+    private p2CursorIndex: number = 1;
+    private selectingForAI: boolean = false; // When true in VS AI mode, P1 is selecting for AI
+
     // Playable characters (those with full implementation)
     private readonly PLAYABLE_CHARACTERS = ['Kevin', 'Noel'];
 
@@ -26,6 +31,12 @@ export class CharacterSelectScene extends Phaser.Scene {
     private readonly PORTRAIT_PATHS: { [key: string]: string } = {
         'Kevin': '/Assets/Character/Kevin/Portrait.png',
         'Noel': '/Assets/Character/Noel/Portrait.jpeg'
+    };
+
+    // Idle frame paths for animations
+    private readonly IDLE_FRAMES: { [key: string]: string[] } = {
+        'Kevin': Array.from({ length: 26 }, (_, i) => `/Assets/Character/Kevin/Idle/sprite_${String(i).padStart(4, '0')}.png`),
+        'Noel': Array.from({ length: 13 }, (_, i) => `/Assets/Character/Noel/Idle/sprite_${String(i).padStart(4, '0')}.png`)
     };
 
     constructor() {
@@ -40,16 +51,33 @@ export class CharacterSelectScene extends Phaser.Scene {
         Object.entries(this.PORTRAIT_PATHS).forEach(([name, path]) => {
             this.load.image(`portrait_${name}`, path);
         });
+
+        // Load idle animation frames for playable characters
+        Object.entries(this.IDLE_FRAMES).forEach(([name, frames]) => {
+            frames.forEach((framePath, index) => {
+                this.load.image(`${name}_select_idle_${index}`, framePath);
+            });
+        });
     }
 
     create() {
         const { width, height } = this.scale;
+
+        // Reset state on entry
+        this.p1Selection = null;
+        this.p2Selection = null;
+        this.selectingForAI = false;
+        this.p1CursorIndex = 0;
+        this.p2CursorIndex = 1;
 
         // Dark background
         this.add.rectangle(width / 2, height / 2, width, height, 0x0a0a1a);
 
         // Load manifest and build character list
         this.loadCharacters();
+
+        // Create animations for playable characters
+        this.createIdleAnimations();
 
         // Title
         this.add.text(width / 2, 50, 'SELECT YOUR FIGHTERS', {
@@ -69,29 +97,11 @@ export class CharacterSelectScene extends Phaser.Scene {
             strokeThickness: 2
         }).setOrigin(0.5);
 
-        const modeHint = this.add.text(width / 2, 110, '[TAB] to toggle', {
+        this.add.text(width / 2, 110, '[TAB] to toggle', {
             fontFamily: '"Press Start 2P", monospace',
             fontSize: '8px',
             color: '#888888'
         }).setOrigin(0.5);
-
-        // Tab key to toggle mode
-        this.input.keyboard?.on('keydown-TAB', (event: KeyboardEvent) => {
-            event.preventDefault();
-            this.isVsAI = !this.isVsAI;
-            this.modeText.setText(this.isVsAI ? 'VS AI' : 'VS PLAYER');
-            this.modeText.setColor(this.isVsAI ? '#ff8844' : '#44ff44');
-
-            // In AI mode, auto-select P2 if P1 is selected
-            if (this.isVsAI && this.p1Selection && !this.p2Selection) {
-                this.autoSelectP2();
-            }
-            // Clear P2 selection when switching to player mode
-            if (!this.isVsAI && this.p2Selection) {
-                this.clearSelection(2);
-            }
-            this.updateFightButton();
-        });
 
         // Create preview areas
         this.createPreviewAreas(width, height);
@@ -101,6 +111,232 @@ export class CharacterSelectScene extends Phaser.Scene {
 
         // Create buttons
         this.createButtons(width, height);
+
+        // Setup keyboard controls
+        this.setupKeyboardControls();
+
+        // Update initial cursor display
+        this.updateCursorDisplay();
+    }
+
+    private createIdleAnimations() {
+        // Create animations for each playable character
+        Object.entries(this.IDLE_FRAMES).forEach(([name, frames]) => {
+            const frameKeys = frames.map((_, index) => ({
+                key: `${name}_select_idle_${index}`
+            }));
+
+            if (!this.anims.exists(`${name}_select_idle`)) {
+                this.anims.create({
+                    key: `${name}_select_idle`,
+                    frames: frameKeys,
+                    frameRate: 12,
+                    repeat: -1
+                });
+            }
+        });
+    }
+
+    private setupKeyboardControls() {
+        // Tab key to toggle mode
+        this.input.keyboard?.on('keydown-TAB', (event: KeyboardEvent) => {
+            event.preventDefault();
+            this.isVsAI = !this.isVsAI;
+            this.selectingForAI = false;
+            this.modeText.setText(this.isVsAI ? 'VS AI' : 'VS PLAYER');
+            this.modeText.setColor(this.isVsAI ? '#ff8844' : '#44ff44');
+
+            // Clear P2 selection when switching modes
+            if (this.p2Selection) {
+                this.clearSelection(2);
+            }
+            this.updateFightButton();
+            this.updateCursorDisplay();
+        });
+
+        // P1 Controls: WASD + Space (select) + Backspace (deselect)
+        this.input.keyboard?.on('keydown-W', () => this.moveCursor('p1', 'up'));
+        this.input.keyboard?.on('keydown-S', () => this.moveCursor('p1', 'down'));
+        this.input.keyboard?.on('keydown-A', () => this.moveCursor('p1', 'left'));
+        this.input.keyboard?.on('keydown-D', () => this.moveCursor('p1', 'right'));
+        this.input.keyboard?.on('keydown-SPACE', (event: KeyboardEvent) => {
+            event.preventDefault();
+            this.confirmSelection('p1');
+        });
+        this.input.keyboard?.on('keydown-BACKSPACE', (event: KeyboardEvent) => {
+            event.preventDefault();
+            this.handleDeselection('p1');
+        });
+
+        // P2 Controls: Arrow keys + Enter (select) + Delete (deselect)
+        this.input.keyboard?.on('keydown-UP', () => this.moveCursor('p2', 'up'));
+        this.input.keyboard?.on('keydown-DOWN', () => this.moveCursor('p2', 'down'));
+        this.input.keyboard?.on('keydown-LEFT', () => this.moveCursor('p2', 'left'));
+        this.input.keyboard?.on('keydown-RIGHT', () => this.moveCursor('p2', 'right'));
+        this.input.keyboard?.on('keydown-ENTER', () => this.confirmSelection('p2'));
+        this.input.keyboard?.on('keydown-DELETE', () => this.handleDeselection('p2'));
+    }
+
+    private moveCursor(player: 'p1' | 'p2', direction: 'up' | 'down' | 'left' | 'right') {
+        // In VS AI mode, only P1 controls matter
+        if (this.isVsAI && player === 'p2') return;
+
+        // Get current cursor index based on context
+        let cursorIndex = player === 'p1' ? this.p1CursorIndex : this.p2CursorIndex;
+
+        // In VS AI mode after P1 selected, P1 controls P2's cursor
+        if (this.isVsAI && this.selectingForAI && player === 'p1') {
+            cursorIndex = this.p2CursorIndex;
+        }
+
+        const cols = 6;
+        const totalChars = this.characters.length;
+        let newIndex = cursorIndex;
+
+        switch (direction) {
+            case 'up':
+                newIndex = cursorIndex - cols;
+                if (newIndex < 0) newIndex = cursorIndex;
+                break;
+            case 'down':
+                newIndex = cursorIndex + cols;
+                if (newIndex >= totalChars) newIndex = cursorIndex;
+                break;
+            case 'left':
+                if (cursorIndex % cols !== 0) newIndex = cursorIndex - 1;
+                break;
+            case 'right':
+                if ((cursorIndex + 1) % cols !== 0 && cursorIndex + 1 < totalChars) {
+                    newIndex = cursorIndex + 1;
+                }
+                break;
+        }
+
+        // Update the appropriate cursor
+        if (this.isVsAI && this.selectingForAI && player === 'p1') {
+            this.p2CursorIndex = newIndex;
+        } else if (player === 'p1') {
+            this.p1CursorIndex = newIndex;
+        } else {
+            this.p2CursorIndex = newIndex;
+        }
+
+        this.updateCursorDisplay();
+    }
+
+    private confirmSelection(player: 'p1' | 'p2') {
+        // In VS AI mode, only P1 controls are used
+        if (this.isVsAI && player === 'p2') return;
+
+        if (this.isVsAI && this.selectingForAI) {
+            // P1 is selecting for AI (P2)
+            const char = this.characters[this.p2CursorIndex];
+            if (char.isPlayable && char.name !== this.p1Selection) {
+                this.p2Selection = char.name;
+                this.updateSlotHighlight(char.name, 'p2');
+                this.updatePreview(2, char.name);
+                this.updateFightButton();
+            }
+        } else if (player === 'p1' || (this.isVsAI && !this.selectingForAI)) {
+            // P1 selecting for themselves
+            if (!this.p1Selection) {
+                const char = this.characters[this.p1CursorIndex];
+                if (char.isPlayable) {
+                    this.p1Selection = char.name;
+                    this.updateSlotHighlight(char.name, 'p1');
+                    this.updatePreview(1, char.name);
+
+                    if (this.isVsAI) {
+                        // Switch to selecting for AI
+                        this.selectingForAI = true;
+                        // Move P2 cursor to first playable character that isn't P1
+                        const availableIndex = this.characters.findIndex(
+                            c => c.isPlayable && c.name !== this.p1Selection
+                        );
+                        if (availableIndex >= 0) {
+                            this.p2CursorIndex = availableIndex;
+                        }
+                    }
+                    this.updateFightButton();
+                    this.updateCursorDisplay();
+                }
+            }
+        } else if (player === 'p2' && !this.isVsAI) {
+            // P2 selecting for themselves in VS Player mode
+            if (!this.p2Selection) {
+                const char = this.characters[this.p2CursorIndex];
+                if (char.isPlayable && char.name !== this.p1Selection) {
+                    this.p2Selection = char.name;
+                    this.updateSlotHighlight(char.name, 'p2');
+                    this.updatePreview(2, char.name);
+                    this.updateFightButton();
+                }
+            }
+        }
+    }
+
+    private handleDeselection(player: 'p1' | 'p2') {
+        if (this.isVsAI) {
+            // In VS AI mode, deselect works in reverse order
+            if (this.selectingForAI && this.p2Selection) {
+                this.clearSelection(2);
+            } else if (this.p1Selection) {
+                this.clearSelection(1);
+                this.selectingForAI = false;
+            }
+        } else {
+            // Normal mode - each player deselects their own
+            if (player === 'p1' && this.p1Selection) {
+                this.clearSelection(1);
+            } else if (player === 'p2' && this.p2Selection) {
+                this.clearSelection(2);
+            }
+        }
+        this.updateFightButton();
+        this.updateCursorDisplay();
+    }
+
+    private updateCursorDisplay() {
+        // Reset all slot borders
+        this.characters.forEach((char) => {
+            const slot = this.characterSlots.get(char.name);
+            if (slot) {
+                const bg = slot.getData('bg') as Phaser.GameObjects.Rectangle;
+
+                // Check if this slot is selected
+                if (this.p1Selection === char.name) {
+                    bg.setStrokeStyle(4, 0x4444ff);
+                } else if (this.p2Selection === char.name) {
+                    bg.setStrokeStyle(4, 0xff4444);
+                } else if (char.isPlayable) {
+                    bg.setStrokeStyle(2, 0xffcc00);
+                } else {
+                    bg.setStrokeStyle(2, 0x444444);
+                }
+            }
+        });
+
+        // Show P1 cursor (unless already selected)
+        if (!this.p1Selection || (this.isVsAI && !this.selectingForAI)) {
+            const p1Char = this.characters[this.p1CursorIndex];
+            const p1Slot = this.characterSlots.get(p1Char?.name);
+            if (p1Slot && !this.p1Selection) {
+                const bg = p1Slot.getData('bg') as Phaser.GameObjects.Rectangle;
+                bg.setStrokeStyle(4, 0x6666ff); // Bright blue cursor
+            }
+        }
+
+        // Show P2 cursor
+        const showP2Cursor = (!this.isVsAI && !this.p2Selection) ||
+            (this.isVsAI && this.selectingForAI && !this.p2Selection);
+        if (showP2Cursor) {
+            const p2Char = this.characters[this.p2CursorIndex];
+            const p2Slot = this.characterSlots.get(p2Char?.name);
+            if (p2Slot) {
+                const bg = p2Slot.getData('bg') as Phaser.GameObjects.Rectangle;
+                bg.setStrokeStyle(4, 0xff6666); // Bright red cursor
+            }
+        }
     }
 
     private loadCharacters() {
@@ -128,6 +364,7 @@ export class CharacterSelectScene extends Phaser.Scene {
     private createPreviewAreas(width: number, height: number) {
         const boxSize = 200;
         const boxHeight = 220;
+        const animSize = 150; // Size for the animation sprite area
 
         // P1 Preview (left side)
         this.p1Preview = this.add.container(width * 0.18, height * 0.38);
@@ -144,17 +381,33 @@ export class CharacterSelectScene extends Phaser.Scene {
         const p1Bg = this.add.rectangle(0, 0, boxSize, boxHeight, 0x1a1a2e);
         p1Bg.setStrokeStyle(3, 0x4444ff);
 
-        // P1 Name to the RIGHT of the portrait box
-        const p1CharText = this.add.text(boxSize / 2 + 20, 0, '???', {
+        // P1 Character Name ABOVE the animation area (to the right of portrait)
+        const p1CharText = this.add.text(boxSize / 2 + animSize / 2 + 20, -animSize / 2 - 20, '???', {
             fontFamily: '"Press Start 2P", monospace',
-            fontSize: '16px',
+            fontSize: '14px',
             color: '#ffcc00',
             padding: { top: 4, bottom: 4 }
-        }).setOrigin(0, 0.5);
+        }).setOrigin(0.5);
 
-        this.p1Preview.add([p1Label, p1Bg, p1CharText]);
+        // Animation container area (to the right of portrait)
+        const p1AnimBg = this.add.rectangle(boxSize / 2 + animSize / 2 + 20, 20, animSize, animSize, 0x1a1a2e);
+        p1AnimBg.setStrokeStyle(2, 0x4444ff);
+
+        this.p1Preview.add([p1Label, p1Bg, p1AnimBg, p1CharText]);
         this.p1Preview.setData('charText', p1CharText);
+        this.p1Preview.setData('animBg', p1AnimBg);
         this.p1Preview.setData('boxSize', { w: boxSize, h: boxHeight });
+        this.p1Preview.setData('animOffset', { x: boxSize / 2 + animSize / 2 + 20, y: 20 });
+
+        // P1 Controls Text
+        const p1Controls = this.add.text(0, boxHeight / 2 + 30, 'WASD - Move\nSPACE - Select\nBACKSPACE - Undo', {
+            fontFamily: '"Press Start 2P", monospace',
+            fontSize: '10px',
+            color: '#aaaaaa',
+            align: 'center',
+            lineSpacing: 8
+        }).setOrigin(0.5, 0);
+        this.p1Preview.add(p1Controls);
 
         // VS Text in the center
         this.add.text(width / 2, height * 0.38, 'VS', {
@@ -181,17 +434,33 @@ export class CharacterSelectScene extends Phaser.Scene {
         const p2Bg = this.add.rectangle(0, 0, boxSize, boxHeight, 0x1a1a2e);
         p2Bg.setStrokeStyle(3, 0xff4444);
 
-        // P2 Name to the LEFT of the portrait box
-        const p2CharText = this.add.text(-boxSize / 2 - 20, 0, '???', {
+        // P2 Character Name ABOVE the animation area (to the left of portrait)
+        const p2CharText = this.add.text(-boxSize / 2 - animSize / 2 - 20, -animSize / 2 - 20, '???', {
             fontFamily: '"Press Start 2P", monospace',
-            fontSize: '16px',
+            fontSize: '14px',
             color: '#ffcc00',
             padding: { top: 4, bottom: 4 }
-        }).setOrigin(1, 0.5);
+        }).setOrigin(0.5);
 
-        this.p2Preview.add([p2Label, p2Bg, p2CharText]);
+        // Animation container area (to the left of portrait)
+        const p2AnimBg = this.add.rectangle(-boxSize / 2 - animSize / 2 - 20, 20, animSize, animSize, 0x1a1a2e);
+        p2AnimBg.setStrokeStyle(2, 0xff4444);
+
+        this.p2Preview.add([p2Label, p2Bg, p2AnimBg, p2CharText]);
         this.p2Preview.setData('charText', p2CharText);
+        this.p2Preview.setData('animBg', p2AnimBg);
         this.p2Preview.setData('boxSize', { w: boxSize, h: boxHeight });
+        this.p2Preview.setData('animOffset', { x: -boxSize / 2 - animSize / 2 - 20, y: 20 });
+
+        // P2 Controls Text
+        const p2Controls = this.add.text(0, boxHeight / 2 + 30, 'ARROWS - Move\nENTER - Select\nDELETE - Undo', {
+            fontFamily: '"Press Start 2P", monospace',
+            fontSize: '10px',
+            color: '#aaaaaa',
+            align: 'center',
+            lineSpacing: 8
+        }).setOrigin(0.5, 0);
+        this.p2Preview.add(p2Controls);
     }
 
     private createCharacterGrid(width: number, height: number) {
@@ -256,7 +525,7 @@ export class CharacterSelectScene extends Phaser.Scene {
             }).setOrigin(0.5);
             container.add([lockBg, lockIcon]);
         } else {
-            // Make interactive for playable characters
+            // Make interactive for playable characters (mouse click still works)
             bg.setInteractive({ useHandCursor: true });
 
             bg.on('pointerover', () => {
@@ -266,9 +535,7 @@ export class CharacterSelectScene extends Phaser.Scene {
             });
 
             bg.on('pointerout', () => {
-                if (!this.isSelected(char.name)) {
-                    bg.setStrokeStyle(2, 0xffcc00);
-                }
+                this.updateCursorDisplay();
             });
 
             bg.on('pointerdown', () => {
@@ -299,39 +566,60 @@ export class CharacterSelectScene extends Phaser.Scene {
             this.updateSlotHighlight(name, 'p1');
             this.updatePreview(1, name);
 
-            // In AI mode, auto-select P2
             if (this.isVsAI) {
-                this.autoSelectP2();
+                this.selectingForAI = true;
+                const availableIndex = this.characters.findIndex(
+                    c => c.isPlayable && c.name !== this.p1Selection
+                );
+                if (availableIndex >= 0) {
+                    this.p2CursorIndex = availableIndex;
+                }
             }
-        } else if (!this.p2Selection && !this.isVsAI) {
+        } else if (!this.p2Selection) {
             this.p2Selection = name;
             this.updateSlotHighlight(name, 'p2');
             this.updatePreview(2, name);
         }
 
         this.updateFightButton();
-    }
-
-    private autoSelectP2() {
-        // Pick a random playable character different from P1
-        const available = this.PLAYABLE_CHARACTERS.filter(c => c !== this.p1Selection);
-        if (available.length > 0) {
-            const randomChar = available[Math.floor(Math.random() * available.length)];
-            this.p2Selection = randomChar;
-            this.updateSlotHighlight(randomChar, 'p2');
-            this.updatePreview(2, randomChar);
-        }
+        this.updateCursorDisplay();
     }
 
     private clearSelection(player: 1 | 2) {
         if (player === 1 && this.p1Selection) {
             this.resetSlotHighlight(this.p1Selection);
             this.p1Selection = null;
-            (this.p1Preview.getData('charText') as Phaser.GameObjects.Text).setText('???');
+            const charText = this.p1Preview.getData('charText') as Phaser.GameObjects.Text;
+            charText.setText('???');
+            // Remove animation sprite
+            const existingAnim = this.p1Preview.getData('animSprite') as Phaser.GameObjects.Sprite;
+            if (existingAnim) {
+                existingAnim.destroy();
+                this.p1Preview.setData('animSprite', null);
+            }
+            // Remove portrait
+            const existingPortrait = this.p1Preview.getData('portrait') as Phaser.GameObjects.Image;
+            if (existingPortrait) {
+                existingPortrait.destroy();
+                this.p1Preview.setData('portrait', null);
+            }
         } else if (player === 2 && this.p2Selection) {
             this.resetSlotHighlight(this.p2Selection);
             this.p2Selection = null;
-            (this.p2Preview.getData('charText') as Phaser.GameObjects.Text).setText('???');
+            const charText = this.p2Preview.getData('charText') as Phaser.GameObjects.Text;
+            charText.setText('???');
+            // Remove animation sprite
+            const existingAnim = this.p2Preview.getData('animSprite') as Phaser.GameObjects.Sprite;
+            if (existingAnim) {
+                existingAnim.destroy();
+                this.p2Preview.setData('animSprite', null);
+            }
+            // Remove portrait
+            const existingPortrait = this.p2Preview.getData('portrait') as Phaser.GameObjects.Image;
+            if (existingPortrait) {
+                existingPortrait.destroy();
+                this.p2Preview.setData('portrait', null);
+            }
         }
     }
 
@@ -357,7 +645,7 @@ export class CharacterSelectScene extends Phaser.Scene {
         const charText = preview.getData('charText') as Phaser.GameObjects.Text;
         charText.setText(name.toUpperCase());
 
-        // Update portrait in preview
+        // Update portrait in preview box
         const portraitKey = `portrait_${name}`;
         const existingPortrait = preview.getData('portrait') as Phaser.GameObjects.Image;
 
@@ -393,13 +681,45 @@ export class CharacterSelectScene extends Phaser.Scene {
             preview.setData('portrait', portrait);
             preview.setData('portraitMask', maskShape);
         }
+
+        // Update idle animation sprite
+        const existingAnim = preview.getData('animSprite') as Phaser.GameObjects.Sprite;
+        if (existingAnim) {
+            existingAnim.destroy();
+        }
+
+        // Create new animation sprite if this character has one
+        const animKey = `${name}_select_idle`;
+        if (this.anims.exists(animKey)) {
+            const animOffset = preview.getData('animOffset') as { x: number; y: number };
+            const animSprite = this.add.sprite(animOffset.x, animOffset.y, `${name}_select_idle_0`);
+
+            // Scale to fit in the animation area (150x150)
+            // Apply character-specific scaling (Noel is 1.23x larger to match battle scene)
+            const targetSize = 130;
+            const spriteSize = Math.max(animSprite.width, animSprite.height);
+            const baseScale = targetSize / spriteSize;
+            const characterMultiplier = name === 'Noel' ? 1.23 : 1.0;
+            const animScale = baseScale * characterMultiplier;
+            animSprite.setScale(animScale);
+
+
+            // Flip P2's animation to face right (toward center)
+            if (player === 2) {
+                animSprite.setFlipX(true);
+            }
+
+            animSprite.play(animKey);
+            preview.add(animSprite);
+            preview.setData('animSprite', animSprite);
+        }
     }
 
     private createButtons(width: number, height: number) {
         const buttonY = height - 60;
 
         // Back button
-        const backBtn = this.createRetroButton(width * 0.25, buttonY, 'BACK', 0xaa4444, () => {
+        this.createRetroButton(width * 0.25, buttonY, 'BACK', 0xaa4444, () => {
             this.scene.start('TitleScene');
         });
 

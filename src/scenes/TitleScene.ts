@@ -136,9 +136,19 @@ export class TitleScene extends Phaser.Scene {
         });
 
         btnStory.on('pointerdown', () => {
-            // Story mode - for now, just start the game
+            // Story mode - disabled for now as per user request
             // You can implement a story scene later
-            this.startGame();
+            console.log('Story Mode selected - Pending implementation');
+
+            // Optional: Visual feedback that it's disabled/coming soon
+            this.tweens.add({
+                targets: btnStory,
+                x: btnStory.x + 5,
+                duration: 50,
+                yoyo: true,
+                repeat: 3,
+                ease: 'Sine.easeInOut'
+            });
         });
 
         // Settings Button
