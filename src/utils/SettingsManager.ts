@@ -16,11 +16,11 @@ export interface GameSettings {
 }
 
 const DEFAULT_SETTINGS: GameSettings = {
-    titleMusicVolume: 0.5,
+    titleMusicVolume: 0.05,
     titleMusicEnabled: true,
-    fightMusicVolume: 0.5,
+    fightMusicVolume: 0.05,
     fightMusicEnabled: true,
-    sfxVolume: 0.7,
+    sfxVolume: 0.4,
     sfxEnabled: true,
     showFPS: false,
     screenShake: true,
