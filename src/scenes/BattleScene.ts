@@ -171,12 +171,20 @@ export class BattleScene extends Phaser.Scene {
                 makeAnim(name, 'duck', 48, 0);
 
                 // Jump animations - split into 3 phases
-                // Jump Start (rising): frames 0-7
-                makeAnimFromRange(name, 'jump_start', 'jump', 0, 7, 48, 0);
-                // Jump Air (airborne): frames 8-21, loop
-                makeAnimFromRange(name, 'jump_air', 'jump', 8, 21, 18, -1);
-                // Jump Land (landing): frames 22-34
-                makeAnimFromRange(name, 'jump_land', 'jump', 22, 34, 48, 0);
+                if (name === 'Noel') {
+                    // Noel specific jump phases (assuming 20 frames)
+                    makeAnimFromRange(name, 'jump_start', 'jump', 0, 9, 48, 0);
+                    makeAnimFromRange(name, 'jump_air', 'jump', 10, 16, 18, -1);
+                    makeAnimFromRange(name, 'jump_land', 'jump', 17, 19, 48, 0);
+                } else {
+                    // Default jump phases (mostly for Kevin's 35 frames)
+                    // Jump Start (rising): frames 0-7
+                    makeAnimFromRange(name, 'jump_start', 'jump', 0, 7, 48, 0);
+                    // Jump Air (airborne): frames 8-21, loop
+                    makeAnimFromRange(name, 'jump_air', 'jump', 8, 21, 18, -1);
+                    // Jump Land (landing): frames 22-34
+                    makeAnimFromRange(name, 'jump_land', 'jump', 22, 34, 48, 0);
+                }
 
                 // Block animation (play once, hold last frame)
                 makeAnim(name, 'block', 48, 0);

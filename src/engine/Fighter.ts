@@ -58,7 +58,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     public attackBox: Phaser.GameObjects.Rectangle;
     private moveSpeed: number = 240; // Snappy ground movement
     private jumpForce: number = -620; // Strong initial jump
-    private doubleJumpForce: number = -500; // Solid second jump
+    private doubleJumpForce: number = -530; // Solid second jump
 
     // Jab chain tracking
     private lastJabStep: number = 0;
@@ -91,6 +91,16 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
             (this.attackBox.body as Phaser.Physics.Arcade.Body).enable = false;
         }
         this.attackBox.setVisible(false); // Set to true for debug
+
+        // Handle animation chaining
+        this.on('animationcomplete', (animation: Phaser.Animations.Animation) => {
+            if (animation.key.endsWith('_jump_start')) {
+                if (this.currentState === 'JUMP') {
+                    this.playCharacterAnim('jump_air', true);
+                    this.jumpPhase = 'airborne';
+                }
+            }
+        });
     }
 
     // Call this after setting scale to properly size the hitbox
@@ -427,24 +437,17 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
                     }
                 });
             }
-        } else if (this.isAirborne && this.currentState === 'JUMP') {
-            // In the air - determine phase based on velocity
-            if (body && body.velocity.y < -100) {
-                // Rising phase
-                if (this.jumpPhase !== 'rising') {
-                    this.jumpPhase = 'rising';
-                }
-            } else if (body && body.velocity.y >= -100 && body.velocity.y < 100) {
-                // Peak/airborne phase
-                if (this.jumpPhase !== 'airborne') {
+        } else if (this.isAirborne && (this.currentState === 'JUMP' || this.currentState === 'AIR_ATTACK')) {
+            // In the air - ensure jump_air plays after jump_start or when falling
+            if (body && body.velocity.y > 0) {
+                this.jumpPhase = 'falling';
+                this.playCharacterAnim('jump_air', true);
+            } else if (this.jumpPhase === 'airborne') {
+                this.playCharacterAnim('jump_air', true);
+            } else if (body && body.velocity.y >= -100) {
+                // Near peak, transition to airborne if not already
+                if (this.jumpPhase === 'rising') {
                     this.jumpPhase = 'airborne';
-                    this.playCharacterAnim('jump_air', true);
-                }
-            } else if (body && body.velocity.y >= 100) {
-                // Falling phase - continue airborne animation
-                if (this.jumpPhase !== 'falling') {
-                    this.jumpPhase = 'falling';
-                    // Keep playing air animation while falling
                     this.playCharacterAnim('jump_air', true);
                 }
             }

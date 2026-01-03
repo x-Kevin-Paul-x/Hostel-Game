@@ -202,6 +202,28 @@
         "Assets/Character/Noel/Jab/sprite_0013.png",
         "Assets/Character/Noel/Jab/sprite_0014.png",
         "Assets/Character/Noel/Jab/sprite_0015.png"
+      ],
+      "jumpFrames": [
+        "Assets/Character/Noel/Jump/sprite_0000.png",
+        "Assets/Character/Noel/Jump/sprite_0001.png",
+        "Assets/Character/Noel/Jump/sprite_0002.png",
+        "Assets/Character/Noel/Jump/sprite_0003.png",
+        "Assets/Character/Noel/Jump/sprite_0004.png",
+        "Assets/Character/Noel/Jump/sprite_0005.png",
+        "Assets/Character/Noel/Jump/sprite_0006.png",
+        "Assets/Character/Noel/Jump/sprite_0007.png",
+        "Assets/Character/Noel/Jump/sprite_0008.png",
+        "Assets/Character/Noel/Jump/sprite_0009.png",
+        "Assets/Character/Noel/Jump/sprite_0010.png",
+        "Assets/Character/Noel/Jump/sprite_0011.png",
+        "Assets/Character/Noel/Jump/sprite_0012.png",
+        "Assets/Character/Noel/Jump/sprite_0013.png",
+        "Assets/Character/Noel/Jump/sprite_0014.png",
+        "Assets/Character/Noel/Jump/sprite_0015.png",
+        "Assets/Character/Noel/Jump/sprite_0016.png",
+        "Assets/Character/Noel/Jump/sprite_0017.png",
+        "Assets/Character/Noel/Jump/sprite_0018.png",
+        "Assets/Character/Noel/Jump/sprite_0019.png"
       ]
     }
   ]
