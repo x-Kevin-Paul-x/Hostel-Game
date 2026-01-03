@@ -118,7 +118,7 @@ export class BattleScene extends Phaser.Scene {
         this.physics.add.existing(this.floor, true); // Static body
 
         // Create Animations dynamically from loaded texture keys and manifest settings
-        const defaultJabFrameRate = 72; // double the previous 36 -> faster jab by default
+        const defaultJabFrameRate = 60; // double the previous 36 -> faster jab by default
 
         const manifest = this.registry.get('character-manifest') || null;
 
@@ -160,6 +160,12 @@ export class BattleScene extends Phaser.Scene {
                 // Jab: use per-character jabFrameRate if provided, else default
                 const jabRate = char.jabFrameRate ? Number(char.jabFrameRate) : defaultJabFrameRate;
                 makeAnim(name, 'jab', jabRate, 0);
+
+                // Special handling for Noel's two-part jab
+                if (name === 'Noel') {
+                    makeAnimFromRange(name, 'jab_1', 'jab', 0, 7, jabRate, 0);
+                    makeAnimFromRange(name, 'jab_2', 'jab', 8, 15, jabRate, 0);
+                }
 
                 // Duck animation (play once, hold last frame)
                 makeAnim(name, 'duck', 48, 0);

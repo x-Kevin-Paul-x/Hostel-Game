@@ -60,6 +60,11 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
     private jumpForce: number = -620; // Strong initial jump
     private doubleJumpForce: number = -500; // Solid second jump
 
+    // Jab chain tracking
+    private lastJabStep: number = 0;
+    private prevJabDown: boolean = false;
+    private attackTimers: Phaser.Time.TimerEvent[] = [];
+
     // Gravity scaling for better jump feel
     private normalGravity: number = 900; // Slightly floaty for combo potential
     private fallingGravity: number = 1500; // Fast fall for responsiveness
@@ -309,6 +314,7 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
                     this.setVelocityX(0);
                     this.currentState = 'IDLE';
                     this.playCharacterAnim('idle');
+                    this.lastJabStep = 0;
                 }
             }
 
@@ -337,16 +343,33 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
         }
 
         // Attack cooldown check
+        const jabJustPressed = input.jab && !this.prevJabDown;
+        this.prevJabDown = input.jab;
         const canAttack = time - this.lastAttackTime > this.attackCooldown;
 
         // Ground attacks
-        if (!this.isAirborne && canAttack) {
-            if (input.jab && this.currentState !== 'ATTACK') {
-                this.performAttack('jab', time);
-            } else if (input.punch && this.currentState !== 'ATTACK') {
-                this.performAttack('punch', time);
-            } else if (input.kick && this.currentState !== 'ATTACK') {
-                this.performAttack('kick', time);
+        if (!this.isAirborne) {
+            // Check for jab chain (Noel specific two-part jab)
+            if (jabJustPressed && this.currentState === 'ATTACK' && this.lastAttackType === 'jab' && this.lastJabStep === 1) {
+                this.performAttack('jab_2', time);
+                this.lastJabStep = 2;
+            } else if (canAttack) {
+                // Allow starting or restarting a jab if cooldown is over
+                if (jabJustPressed && (this.currentState !== 'ATTACK' || this.lastAttackType === 'jab')) {
+                    if (this.checkAnimExists('jab_1')) {
+                        this.performAttack('jab_1', time);
+                        this.lastJabStep = 1;
+                    } else {
+                        this.performAttack('jab', time);
+                        this.lastJabStep = 0;
+                    }
+                } else if (input.punch && this.currentState !== 'ATTACK') {
+                    this.performAttack('punch', time);
+                    this.lastJabStep = 0;
+                } else if (input.kick && this.currentState !== 'ATTACK') {
+                    this.performAttack('kick', time);
+                    this.lastJabStep = 0;
+                }
             }
         }
 
@@ -375,6 +398,17 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
                 }
             }
         } catch (e) { }
+    }
+
+    private checkAnimExists(anim: string): boolean {
+        try {
+            const texKey = (this.texture as Phaser.Textures.Texture).key;
+            const charName = texKey.split('_')[0];
+            const animKey = `${charName}_${anim}`;
+            return (this.anims && this.anims.animationManager.exists(animKey));
+        } catch (e) {
+            return false;
+        }
     }
 
     private updateJumpPhase(body: Phaser.Physics.Arcade.Body, wasAirborne: boolean) {
@@ -450,10 +484,14 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
         });
     }
 
-    performAttack(type: 'punch' | 'kick' | 'jab', time: number) {
+    performAttack(type: 'punch' | 'kick' | 'jab' | 'jab_1' | 'jab_2', time: number) {
+        // Clear old attack timers to allow chaining/canceling
+        this.attackTimers.forEach(t => t.remove());
+        this.attackTimers = [];
+
         this.currentState = 'ATTACK';
         this.setVelocityX(0);
-        this.lastAttackType = type;
+        this.lastAttackType = type.startsWith('jab') ? 'jab' : type as any;
         this.lastAttackTime = time;
 
         // Play attack animation if present
@@ -464,10 +502,12 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
         let startup = 80;
         let activeWindow = 180;
         let recovery = 350;
-        if (type === 'jab') {
-            startup = 45;          // Very fast jab startup
+        if (type.startsWith('jab')) {
+            startup = 35;          // Faster jab startup
             activeWindow = 120;    // Short but effective
-            recovery = 180;        // Quick recovery for combos
+            // Use longer recovery for full single jab (like Kevin's 30 frames)
+            // to ensure the full animation plays, but keep chained jabs snappy.
+            recovery = (type === 'jab') ? 350 : 180;
         } else if (type === 'kick') {
             startup = 110;         // Faster kick startup
             activeWindow = 220;    // Good active frames
@@ -475,24 +515,25 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
         }
 
         // Enable hitbox after startup frames
-        this.scene.time.delayedCall(startup, () => {
+        this.attackTimers.push(this.scene.time.delayedCall(startup, () => {
             if (this.currentState === 'ATTACK' && this.attackBox.body) {
                 (this.attackBox.body as Phaser.Physics.Arcade.Body).enable = true;
             }
-        });
+        }));
 
         // Disable hitbox after active window
-        this.scene.time.delayedCall(startup + activeWindow, () => {
+        this.attackTimers.push(this.scene.time.delayedCall(startup + activeWindow, () => {
             if (this.attackBox.body) (this.attackBox.body as Phaser.Physics.Arcade.Body).enable = false;
-        });
+        }));
 
         // Reset state after full recovery
-        this.scene.time.delayedCall(recovery, () => {
+        this.attackTimers.push(this.scene.time.delayedCall(recovery, () => {
             if (this.currentState === 'ATTACK') {
                 this.currentState = 'IDLE';
+                this.lastJabStep = 0;
                 if (this.attackBox.body) (this.attackBox.body as Phaser.Physics.Arcade.Body).enable = false;
             }
-        });
+        }));
     }
 
     applyHitstun(duration: number, knockbackX: number, knockbackY: number) {
