@@ -1,6 +1,114 @@
 {
   "characters": [
     {
+      "name": "Abdul",
+      "path": "Assets/Character/Abdul",
+      "walkFrames": [],
+      "idleFrames": [],
+      "jabFrames": [],
+      "duckFrames": [],
+      "jumpFrames": [],
+      "blockFrames": [],
+      "frameRates": {
+        "walk": 24,
+        "idle": 20,
+        "jab": 60,
+        "duck": 48,
+        "jump": 48,
+        "block": 48
+      }
+    },
+    {
+      "name": "Advait",
+      "path": "Assets/Character/Advait",
+      "walkFrames": [],
+      "idleFrames": [],
+      "jabFrames": [],
+      "duckFrames": [],
+      "jumpFrames": [],
+      "blockFrames": [],
+      "frameRates": {
+        "walk": 24,
+        "idle": 20,
+        "jab": 60,
+        "duck": 48,
+        "jump": 48,
+        "block": 48
+      }
+    },
+    {
+      "name": "Ali",
+      "path": "Assets/Character/Ali",
+      "walkFrames": [],
+      "idleFrames": [],
+      "jabFrames": [],
+      "duckFrames": [],
+      "jumpFrames": [],
+      "blockFrames": [],
+      "frameRates": {
+        "walk": 24,
+        "idle": 20,
+        "jab": 60,
+        "duck": 48,
+        "jump": 48,
+        "block": 48
+      }
+    },
+    {
+      "name": "Chars",
+      "path": "Assets/Character/Chars",
+      "walkFrames": [],
+      "idleFrames": [],
+      "jabFrames": [],
+      "duckFrames": [],
+      "jumpFrames": [],
+      "blockFrames": [],
+      "frameRates": {
+        "walk": 24,
+        "idle": 20,
+        "jab": 60,
+        "duck": 48,
+        "jump": 48,
+        "block": 48
+      }
+    },
+    {
+      "name": "Fadil",
+      "path": "Assets/Character/Fadil",
+      "walkFrames": [],
+      "idleFrames": [],
+      "jabFrames": [],
+      "duckFrames": [],
+      "jumpFrames": [],
+      "blockFrames": [],
+      "frameRates": {
+        "walk": 24,
+        "idle": 20,
+        "jab": 60,
+        "duck": 48,
+        "jump": 48,
+        "block": 48
+      }
+    },
+    {
+      "name": "Georgie",
+      "path": "Assets/Character/Georgie",
+      "walkFrames": [],
+      "idleFrames": [],
+      "jabFrames": [],
+      "duckFrames": [],
+      "jumpFrames": [],
+      "blockFrames": [],
+      "frameRates": {
+        "walk": 24,
+        "idle": 20,
+        "jab": 60,
+        "duck": 48,
+        "jump": 48,
+        "block": 48
+      }
+    },
+    {
       "name": "Kevin",
       "path": "Assets/Character/Kevin",
       "jabFrameRate": 120,
@@ -55,12 +163,36 @@
         "Assets/Character/Kevin/Idle/sprite_0025.png"
       ],
       "jabFrames": [
+        "Assets/Character/Kevin/Jab/sprite_0000.png",
+        "Assets/Character/Kevin/Jab/sprite_0001.png",
+        "Assets/Character/Kevin/Jab/sprite_0002.png",
+        "Assets/Character/Kevin/Jab/sprite_0003.png",
+        "Assets/Character/Kevin/Jab/sprite_0004.png",
+        "Assets/Character/Kevin/Jab/sprite_0005.png",
+        "Assets/Character/Kevin/Jab/sprite_0006.png",
+        "Assets/Character/Kevin/Jab/sprite_0007.png",
+        "Assets/Character/Kevin/Jab/sprite_0008.png",
+        "Assets/Character/Kevin/Jab/sprite_0009.png",
+        "Assets/Character/Kevin/Jab/sprite_0010.png",
+        "Assets/Character/Kevin/Jab/sprite_0011.png",
+        "Assets/Character/Kevin/Jab/sprite_0012.png",
+        "Assets/Character/Kevin/Jab/sprite_0013.png",
         "Assets/Character/Kevin/Jab/sprite_0014.png",
+        "Assets/Character/Kevin/Jab/sprite_0015.png",
         "Assets/Character/Kevin/Jab/sprite_0016.png",
+        "Assets/Character/Kevin/Jab/sprite_0017.png",
+        "Assets/Character/Kevin/Jab/sprite_0018.png",
         "Assets/Character/Kevin/Jab/sprite_0019.png",
         "Assets/Character/Kevin/Jab/sprite_0020.png",
         "Assets/Character/Kevin/Jab/sprite_0021.png",
-        "Assets/Character/Kevin/Jab/sprite_0022.png"
+        "Assets/Character/Kevin/Jab/sprite_0022.png",
+        "Assets/Character/Kevin/Jab/sprite_0023.png",
+        "Assets/Character/Kevin/Jab/sprite_0024.png",
+        "Assets/Character/Kevin/Jab/sprite_0025.png",
+        "Assets/Character/Kevin/Jab/sprite_0026.png",
+        "Assets/Character/Kevin/Jab/sprite_0027.png",
+        "Assets/Character/Kevin/Jab/sprite_0028.png",
+        "Assets/Character/Kevin/Jab/sprite_0029.png"
       ],
       "duckFrames": [
         "Assets/Character/Kevin/Duck/sprite_0000.png",
@@ -164,12 +296,94 @@
         "Assets/Character/Kevin/Block/sprite_0034.png",
         "Assets/Character/Kevin/Block/sprite_0035.png",
         "Assets/Character/Kevin/Block/sprite_0036.png"
-      ]
+      ],
+      "frameRates": {
+        "walk": 24,
+        "idle": 12,
+        "jab": 240,
+        "duck": 60,
+        "jump": 48,
+        "block": 48
+      }
+    },
+    {
+      "name": "Kevin_2",
+      "path": "Assets/Character/Kevin_2",
+      "walkFrames": [],
+      "idleFrames": [],
+      "jabFrames": [],
+      "duckFrames": [],
+      "jumpFrames": [],
+      "blockFrames": [],
+      "frameRates": {
+        "walk": 24,
+        "idle": 20,
+        "jab": 60,
+        "duck": 48,
+        "jump": 48,
+        "block": 48
+      }
+    },
+    {
+      "name": "Laurren",
+      "path": "Assets/Character/Laurren",
+      "walkFrames": [],
+      "idleFrames": [],
+      "jabFrames": [],
+      "duckFrames": [],
+      "jumpFrames": [],
+      "blockFrames": [],
+      "frameRates": {
+        "walk": 24,
+        "idle": 20,
+        "jab": 60,
+        "duck": 48,
+        "jump": 48,
+        "block": 48
+      }
+    },
+    {
+      "name": "Naren",
+      "path": "Assets/Character/Naren",
+      "walkFrames": [],
+      "idleFrames": [],
+      "jabFrames": [],
+      "duckFrames": [],
+      "jumpFrames": [],
+      "blockFrames": [],
+      "frameRates": {
+        "walk": 24,
+        "idle": 20,
+        "jab": 60,
+        "duck": 48,
+        "jump": 48,
+        "block": 48
+      }
     },
     {
       "name": "Noel",
       "path": "Assets/Character/Noel",
-      "walkFrames": [],
+      "walkFrames": [
+        "Assets/Character/Noel/Walk/sprite_0000.png",
+        "Assets/Character/Noel/Walk/sprite_0001.png",
+        "Assets/Character/Noel/Walk/sprite_0002.png",
+        "Assets/Character/Noel/Walk/sprite_0003.png",
+        "Assets/Character/Noel/Walk/sprite_0004.png",
+        "Assets/Character/Noel/Walk/sprite_0005.png",
+        "Assets/Character/Noel/Walk/sprite_0006.png",
+        "Assets/Character/Noel/Walk/sprite_0007.png",
+        "Assets/Character/Noel/Walk/sprite_0008.png",
+        "Assets/Character/Noel/Walk/sprite_0009.png",
+        "Assets/Character/Noel/Walk/sprite_0010.png",
+        "Assets/Character/Noel/Walk/sprite_0011.png",
+        "Assets/Character/Noel/Walk/sprite_0012.png",
+        "Assets/Character/Noel/Walk/sprite_0013.png",
+        "Assets/Character/Noel/Walk/sprite_0014.png",
+        "Assets/Character/Noel/Walk/sprite_0015.png",
+        "Assets/Character/Noel/Walk/sprite_0016.png",
+        "Assets/Character/Noel/Walk/sprite_0017.png",
+        "Assets/Character/Noel/Walk/sprite_0018.png"
+      ],
       "idleFrames": [
         "Assets/Character/Noel/Idle/sprite_0000.png",
         "Assets/Character/Noel/Idle/sprite_0001.png",
@@ -183,7 +397,18 @@
         "Assets/Character/Noel/Idle/sprite_0009.png",
         "Assets/Character/Noel/Idle/sprite_0010.png",
         "Assets/Character/Noel/Idle/sprite_0011.png",
-        "Assets/Character/Noel/Idle/sprite_0012.png"
+        "Assets/Character/Noel/Idle/sprite_0012.png",
+        "Assets/Character/Noel/Idle/sprite_0013.png",
+        "Assets/Character/Noel/Idle/sprite_0014.png",
+        "Assets/Character/Noel/Idle/sprite_0015.png",
+        "Assets/Character/Noel/Idle/sprite_0016.png",
+        "Assets/Character/Noel/Idle/sprite_0017.png",
+        "Assets/Character/Noel/Idle/sprite_0018.png",
+        "Assets/Character/Noel/Idle/sprite_0019.png",
+        "Assets/Character/Noel/Idle/sprite_0020.png",
+        "Assets/Character/Noel/Idle/sprite_0021.png",
+        "Assets/Character/Noel/Idle/sprite_0022.png",
+        "Assets/Character/Noel/Idle/sprite_0023.png"
       ],
       "jabFrames": [
         "Assets/Character/Noel/Jab/sprite_0000.png",
@@ -202,6 +427,30 @@
         "Assets/Character/Noel/Jab/sprite_0013.png",
         "Assets/Character/Noel/Jab/sprite_0014.png",
         "Assets/Character/Noel/Jab/sprite_0015.png"
+      ],
+      "duckFrames": [
+        "Assets/Character/Noel/Duck/sprite_0000.png",
+        "Assets/Character/Noel/Duck/sprite_0001.png",
+        "Assets/Character/Noel/Duck/sprite_0002.png",
+        "Assets/Character/Noel/Duck/sprite_0003.png",
+        "Assets/Character/Noel/Duck/sprite_0004.png",
+        "Assets/Character/Noel/Duck/sprite_0005.png",
+        "Assets/Character/Noel/Duck/sprite_0006.png",
+        "Assets/Character/Noel/Duck/sprite_0007.png",
+        "Assets/Character/Noel/Duck/sprite_0008.png",
+        "Assets/Character/Noel/Duck/sprite_0009.png",
+        "Assets/Character/Noel/Duck/sprite_0010.png",
+        "Assets/Character/Noel/Duck/sprite_0011.png",
+        "Assets/Character/Noel/Duck/sprite_0012.png",
+        "Assets/Character/Noel/Duck/sprite_0013.png",
+        "Assets/Character/Noel/Duck/sprite_0014.png",
+        "Assets/Character/Noel/Duck/sprite_0015.png",
+        "Assets/Character/Noel/Duck/sprite_0016.png",
+        "Assets/Character/Noel/Duck/sprite_0017.png",
+        "Assets/Character/Noel/Duck/sprite_0018.png",
+        "Assets/Character/Noel/Duck/sprite_0019.png",
+        "Assets/Character/Noel/Duck/sprite_0020.png",
+        "Assets/Character/Noel/Duck/sprite_0021.png"
       ],
       "jumpFrames": [
         "Assets/Character/Noel/Jump/sprite_0000.png",
@@ -224,7 +473,83 @@
         "Assets/Character/Noel/Jump/sprite_0017.png",
         "Assets/Character/Noel/Jump/sprite_0018.png",
         "Assets/Character/Noel/Jump/sprite_0019.png"
-      ]
+      ],
+      "blockFrames": [
+        "Assets/Character/Noel/Block/sprite_0000.png",
+        "Assets/Character/Noel/Block/sprite_0001.png",
+        "Assets/Character/Noel/Block/sprite_0002.png",
+        "Assets/Character/Noel/Block/sprite_0003.png",
+        "Assets/Character/Noel/Block/sprite_0004.png",
+        "Assets/Character/Noel/Block/sprite_0005.png",
+        "Assets/Character/Noel/Block/sprite_0006.png",
+        "Assets/Character/Noel/Block/sprite_0007.png",
+        "Assets/Character/Noel/Block/sprite_0008.png",
+        "Assets/Character/Noel/Block/sprite_0009.png",
+        "Assets/Character/Noel/Block/sprite_0010.png",
+        "Assets/Character/Noel/Block/sprite_0011.png"
+      ],
+      "frameRates": {
+        "walk": 24,
+        "idle": 21,
+        "jab": 60,
+        "duck": 48,
+        "jump": 48,
+        "block": 48
+      }
+    },
+    {
+      "name": "Rutvik",
+      "path": "Assets/Character/Rutvik",
+      "walkFrames": [],
+      "idleFrames": [],
+      "jabFrames": [],
+      "duckFrames": [],
+      "jumpFrames": [],
+      "blockFrames": [],
+      "frameRates": {
+        "walk": 24,
+        "idle": 20,
+        "jab": 60,
+        "duck": 48,
+        "jump": 48,
+        "block": 48
+      }
+    },
+    {
+      "name": "Soham",
+      "path": "Assets/Character/Soham",
+      "walkFrames": [],
+      "idleFrames": [],
+      "jabFrames": [],
+      "duckFrames": [],
+      "jumpFrames": [],
+      "blockFrames": [],
+      "frameRates": {
+        "walk": 24,
+        "idle": 20,
+        "jab": 60,
+        "duck": 48,
+        "jump": 48,
+        "block": 48
+      }
+    },
+    {
+      "name": "Vasanth",
+      "path": "Assets/Character/Vasanth",
+      "walkFrames": [],
+      "idleFrames": [],
+      "jabFrames": [],
+      "duckFrames": [],
+      "jumpFrames": [],
+      "blockFrames": [],
+      "frameRates": {
+        "walk": 24,
+        "idle": 20,
+        "jab": 60,
+        "duck": 48,
+        "jump": 48,
+        "block": 48
+      }
     }
   ]
 }

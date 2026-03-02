@@ -99,6 +99,18 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
                     this.playCharacterAnim('jump_air', true);
                     this.jumpPhase = 'airborne';
                 }
+            } else if (animation.key.endsWith('_walk_start')) {
+                if (this.currentState === 'WALK') {
+                    this.playCharacterAnim('walk', true); // Chains to walk loop
+                }
+            } else if (animation.key.endsWith('_duck_start')) {
+                if (this.currentState === 'DUCK') {
+                    this.playCharacterAnim('duck', true); // Chains to duck loop
+                }
+            } else if (animation.key.endsWith('_duck_end')) {
+                if (this.currentState === 'DUCK') {
+                    this.currentState = 'IDLE';
+                }
             }
         });
     }
@@ -255,19 +267,23 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
             if (this.currentState !== 'DUCK') {
                 this.currentState = 'DUCK';
                 this.setVelocityX(0);
-                try {
-                    const texKey = (this.texture as Phaser.Textures.Texture).key;
-                    const charName = texKey.split('_')[0];
-                    const animKey = `${charName}_duck`;
-                    if (this.anims && this.anims.animationManager.exists(animKey)) {
-                        this.play(animKey, true);
-                    }
-                } catch (e) { }
+                if (this.checkAnimExists('duck_start')) {
+                    this.playCharacterAnim('duck_start', true);
+                } else {
+                    this.playCharacterAnim('duck', true);
+                }
             }
             if (this.attackBox.body) (this.attackBox.body as Phaser.Physics.Arcade.Body).enable = false;
             return;
-        } else {
+        } else if (this.isDucking && !input.duck) {
             this.isDucking = false; // Reset to normal hitbox
+            if (this.currentState === 'DUCK') {
+                if (this.checkAnimExists('duck_end')) {
+                    this.playCharacterAnim('duck_end', false);
+                } else {
+                    this.currentState = 'IDLE';
+                }
+            }
         }
 
         // Update attack box position - position at chest/arm level for jab
@@ -298,7 +314,15 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
                 this.facingRight = false;
                 if (!this.isAirborne) {
                     this.currentState = 'WALK';
-                    this.playCharacterAnim('walk');
+                    if (this.checkAnimExists('walk_start')) {
+                        const currentAnim = this.anims.currentAnim?.key;
+                        const charName = this.texture.key.split('_')[0];
+                        if (currentAnim !== `${charName}_walk_start` && currentAnim !== `${charName}_walk`) {
+                            this.playCharacterAnim('walk_start', true);
+                        }
+                    } else {
+                        this.playCharacterAnim('walk', true);
+                    }
                 }
             } else if (input.right) {
                 if (this.isAirborne) {
@@ -313,7 +337,15 @@ export class Fighter extends Phaser.Physics.Arcade.Sprite {
                 this.facingRight = true;
                 if (!this.isAirborne) {
                     this.currentState = 'WALK';
-                    this.playCharacterAnim('walk');
+                    if (this.checkAnimExists('walk_start')) {
+                        const currentAnim = this.anims.currentAnim?.key;
+                        const charName = this.texture.key.split('_')[0];
+                        if (currentAnim !== `${charName}_walk_start` && currentAnim !== `${charName}_walk`) {
+                            this.playCharacterAnim('walk_start', true);
+                        }
+                    } else {
+                        this.playCharacterAnim('walk', true);
+                    }
                 }
             } else {
                 if (this.isAirborne) {

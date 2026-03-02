@@ -28,6 +28,9 @@ export class TitleScene extends Phaser.Scene {
 
         // Load background music
         this.load.audio('bgMusic', '/Assets/Background Song/background music.mp3');
+
+        // Preload character manifest so CharacterSelectScene can use it dynamically in its preload
+        this.load.json('characterManifest', '/character-manifest.json');
     }
 
     create() {

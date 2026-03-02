@@ -1,5 +1,7 @@
 import io
 import zipfile
+import json
+import tempfile
 from pathlib import Path
 from typing import List, Tuple, Optional
 
@@ -9,6 +11,12 @@ import numpy as np
 from PIL import Image, ImageFilter
 import base64
 from PIL import ImageDraw
+
+try:
+    from rembg import remove as rembg_remove
+    HAS_REMBG = True
+except ImportError:
+    HAS_REMBG = False
 
 # Local utilities
 from video_to_sprites import parse_time
@@ -166,6 +174,47 @@ def halo_remove(img: Image.Image, erode_px: int) -> Image.Image:
     return Image.fromarray(arr)
 
 
+def color_spill_suppress(img: Image.Image, target_rgb: Tuple[int, int, int], amount: float = 1.0) -> Image.Image:
+    if amount <= 0: return img
+    arr = np.array(img.convert("RGBA")).astype(np.float32)
+    rgb = arr[..., :3]
+    target = np.array(target_rgb, dtype=np.float32)
+    dist = np.linalg.norm(rgb - target, axis=-1)
+    blend = np.clip((120 - dist) / 120.0, 0, 1) * amount
+    gray = np.sum(rgb * np.array([0.299, 0.587, 0.114]), axis=-1, keepdims=True)
+    arr[..., :3] = rgb * (1 - blend[..., None]) + gray * blend[..., None]
+    return Image.fromarray(arr.astype(np.uint8))
+
+def center_of_mass_numpy(alpha_channel: np.ndarray) -> Tuple[float, float]:
+    total = np.sum(alpha_channel)
+    if total == 0:
+        return 0, 0
+    y_indices, x_indices = np.indices(alpha_channel.shape)
+    cy = np.sum(y_indices * alpha_channel) / total
+    cx = np.sum(x_indices * alpha_channel) / total
+    return cy, cx
+
+def stabilize_center_of_mass(processed_frames: List[Image.Image], canvas_w: int) -> List[Image.Image]:
+    target_com = None
+    stabilized = []
+    for p in processed_frames:
+        arr = np.array(p)
+        alpha = arr[..., 3]
+        if np.sum(alpha) == 0:
+            stabilized.append(p)
+            continue
+        com_y, com_x = center_of_mass_numpy(alpha)
+        if target_com is None:
+            target_com = (com_y, com_x)
+            stabilized.append(p)
+            continue
+        dy = target_com[0] - com_y
+        dx = target_com[1] - com_x
+        p_shifted = Image.new("RGBA", (canvas_w, canvas_w), (0, 0, 0, 0))
+        p_shifted.paste(p, (int(np.round(dx)), int(np.round(dy))))
+        stabilized.append(p_shifted)
+    return stabilized
+
 def extract_palette(img: Image.Image, n: int = 8) -> List[Tuple[int, int, int]]:
     # adaptive palette
     small = img.convert("RGB").resize((96, 96))
@@ -237,15 +286,9 @@ with left:
     if video_file:
         # Save to temp file if new upload (preserve extension so imageio/ffmpeg can detect backend)
         suffix = Path(video_file.name).suffix or ".mp4"
-        tmp = Path(f".streamlit_tmp_video{suffix}")
-        # Check if we need to write the file (new upload)
-        # We can't easily check if it's the *same* file content without hashing, 
-        # but we can rely on session state to know if we've processed it.
-        # For simplicity, always write if file_uploader has a value.
-        tmp.parent.mkdir(parents=True, exist_ok=True)
-        with open(tmp, "wb") as f:
-            f.write(video_file.getbuffer())
-        st.session_state.video_path = str(tmp)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+            tmp_file.write(video_file.getbuffer())
+            st.session_state.video_path = tmp_file.name
         
         # Get metadata
         try:
@@ -399,7 +442,12 @@ with right:
     if "chroma_color" not in st.session_state:
         st.session_state.chroma_color = "#00FF00" # Default green
 
-    st.subheader("Chroma Key")
+    st.subheader("Background Removal")
+    
+    bg_mode = st.radio("Removal Method", ["Chroma Key (Classic)", "AI (rembg)"], index=0)
+    if bg_mode == "AI (rembg)" and not HAS_REMBG:
+        st.warning("rembg is not installed. Please install it using `pip install rembg`. Falling back to Chroma Key...")
+        bg_mode = "Chroma Key (Classic)"
     
     sample_frame = None
     # Tolerance slider (always available)
@@ -480,10 +528,13 @@ with right:
         # Manual Picker (synced with session state)
         st.session_state.chroma_color = st.color_picker("Background Color", st.session_state.chroma_color)
         
-        # Preview Chroma Key
-        st.caption("Chroma Key Preview")
+        # Preview Background Removal
+        st.caption("Background Removal Preview")
         target_rgb = tuple(int(st.session_state.chroma_color.lstrip("#")[i:i+2], 16) for i in (0, 2, 4))
-        preview_removed = make_alpha_by_chroma(sample_frame, target_rgb, tol)
+        if bg_mode == "AI (rembg)":
+            preview_removed = rembg_remove(sample_frame)
+        else:
+            preview_removed = make_alpha_by_chroma(sample_frame, target_rgb, tol)
         st.image(preview_removed, caption="Background Removed")
         
     else:
@@ -558,15 +609,26 @@ with right:
     
     reduce_px = st.number_input("Trim padding (px)", min_value=0, max_value=50, value=0)
 
-    st.write("Halo Remover")
-    erode_px = st.slider("Erosion Amount (px)", 0, 5, 0)
+    st.write("Edge Treatment")
+    edge_mode = st.selectbox("Method", ["Erosion (Classic)", "Color Spill Suppression"])
+    if edge_mode == "Erosion (Classic)":
+        erode_px = st.slider("Erosion Amount (px)", 0, 5, 0)
+        spill_amt = 0.0
+    else:
+        erode_px = 0
+        spill_amt = st.slider("Suppression Amount", 0.0, 1.0, 0.5, step=0.1)
+
+    stabilize_com = st.checkbox("Auto-Stabilize (Center of Mass)", value=False)
     
     # Preview of final sprite
     if sample_frame and st.session_state.get('roi'):
         st.caption("Final Sprite Preview")
-        # 1. Chroma Key
+        # 1. Background Removal
         target_rgb = tuple(int(st.session_state.chroma_color.lstrip("#")[i:i+2], 16) for i in (0, 2, 4))
-        p_img = make_alpha_by_chroma(sample_frame, target_rgb, tol)
+        if bg_mode == "AI (rembg)":
+            p_img = rembg_remove(sample_frame)
+        else:
+            p_img = make_alpha_by_chroma(sample_frame, target_rgb, tol)
         
         # 2. Crop
         x1, y1, x2, y2 = st.session_state['roi']
@@ -585,14 +647,18 @@ with right:
         canvas.paste(p_img, (off_x, off_y), p_img)
         p_img = canvas
         
-        # 4. Halo Removal
+        # 4. Edge Treatment
         if erode_px > 0:
             p_img = halo_remove(p_img, erode_px)
+        if spill_amt > 0:
+            p_img = color_spill_suppress(p_img, target_rgb, spill_amt)
             
         st.image(p_img, caption=f"Final Preview ({canvas_w}x{canvas_w})", width=canvas_w * 2) # Scale up for visibility
     
     st.markdown("---")
     st.header("6. Export")
+    layout_mode = st.selectbox("Export Layout", ["Square Grid", "Horizontal Strip"])
+    include_json = st.checkbox("Include JSON Manifest", value=False)
     
     col_exp1, col_exp2 = st.columns(2)
     export_sheet = col_exp1.button("Download Sprite Sheet", type="primary")
@@ -606,12 +672,15 @@ with right:
         # Use session state chroma color
         target_rgb = tuple(int(st.session_state.chroma_color.lstrip("#")[i:i+2], 16) for i in (0, 2, 4))
 
-        # Process: chroma key -> compute common bbox -> crop/align -> resize -> halo -> collect
+        # Process: remove bg -> compute common bbox -> crop/align -> resize -> edge -> collect
         processed = []
         
         with st.spinner("Processing frames..."):
             # First pass: remove background
-            processed_tmp = [make_alpha_by_chroma(img, target_rgb, tol) for img in sel_images]
+            if bg_mode == "AI (rembg)":
+                processed_tmp = [rembg_remove(img) for img in sel_images]
+            else:
+                processed_tmp = [make_alpha_by_chroma(img, target_rgb, tol) for img in sel_images]
 
             if crop_mode == "Animation Relative":
                 # prefer manually tuned ROI if present
@@ -647,9 +716,6 @@ with right:
                 
                 for p in processed_tmp:
                     crop = p.crop((x1, y1, x2, y2))
-                    # Resize to fit canvas_w
-                    # Maintain aspect ratio? Usually sprites are square or fit in square.
-                    # Let's fit into canvas_w x canvas_w
                     
                     # Scale factor
                     scale = min(canvas_w / max(1, crop.width), canvas_w / max(1, crop.height))
@@ -657,7 +723,7 @@ with right:
                     crop_resized = crop.resize(new_size, Image.LANCZOS)
                     
                     canvas = Image.new("RGBA", (canvas_w, canvas_w), (0, 0, 0, 0))
-                    # Center it?
+                    # Center it
                     off_x = (canvas_w - new_size[0]) // 2
                     off_y = (canvas_w - new_size[1]) // 2
                     canvas.paste(crop_resized, (off_x, off_y), crop_resized)
@@ -688,13 +754,33 @@ with right:
 
             if erode_px > 0:
                 processed = [halo_remove(p, erode_px) for p in processed]
+            if spill_amt > 0:
+                processed = [color_spill_suppress(p, target_rgb, spill_amt) for p in processed]
+
+            if stabilize_com:
+                processed = stabilize_center_of_mass(processed, canvas_w)
 
             if not processed:
                 st.error("No frames remain after processing")
             else:
-                if export_sheet:
+                if layout_mode == "Horizontal Strip":
+                    sheet = make_spritesheet(processed, canvas_w, canvas_w, len(processed))
+                else:
                     cols = int(ceil(np.sqrt(len(processed))))
                     sheet = make_spritesheet(processed, canvas_w, canvas_w, cols)
+                    
+                manifest_str = None
+                if include_json:
+                    manifest_data = {
+                        "frames": len(processed),
+                        "width": canvas_w,
+                        "height": canvas_w,
+                        "layout": layout_mode,
+                        "fps": st.session_state.get('video_fps', 30.0)
+                    }
+                    manifest_str = json.dumps(manifest_data, indent=2)
+
+                if export_sheet:
                     buf = io.BytesIO()
                     sheet.save(buf, format="PNG")
                     st.download_button("Download Sprite Sheet (Click again if needed)", data=buf.getvalue(), file_name="spritesheet.png", mime="image/png")
@@ -705,6 +791,12 @@ with right:
                         for idx, img in enumerate(processed):
                             b = pil_to_bytes(img)
                             z.writestr(f"sprite_{idx:04d}.png", b)
+                        if manifest_str:
+                            z.writestr("manifest.json", manifest_str.encode("utf-8"))
+                        # Also include sheet for convenience
+                        sheet_buf = io.BytesIO()
+                        sheet.save(sheet_buf, format="PNG")
+                        z.writestr("spritesheet.png", sheet_buf.getvalue())
                     buf.seek(0)
                     st.download_button("Download ZIP (Click again if needed)", data=buf.getvalue(), file_name="sprites.zip", mime="application/zip")
 

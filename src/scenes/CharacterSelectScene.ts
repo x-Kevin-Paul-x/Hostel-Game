@@ -34,29 +34,33 @@ export class CharacterSelectScene extends Phaser.Scene {
     };
 
     // Idle frame paths for animations
-    private readonly IDLE_FRAMES: { [key: string]: string[] } = {
-        'Kevin': Array.from({ length: 26 }, (_, i) => `/Assets/Character/Kevin/Idle/sprite_${String(i).padStart(4, '0')}.png`),
-        'Noel': Array.from({ length: 13 }, (_, i) => `/Assets/Character/Noel/Idle/sprite_${String(i).padStart(4, '0')}.png`)
-    };
+    private IDLE_FRAMES: { [key: string]: string[] } = {};
 
     constructor() {
         super('CharacterSelectScene');
     }
 
     preload() {
-        // Load character manifest
-        this.load.json('characterManifest', '/character-manifest.json');
+        // Character manifest is already preloaded by TitleScene
+        const manifest = this.cache.json.get('characterManifest');
+
+        if (manifest && manifest.characters) {
+            manifest.characters.forEach((char: any) => {
+                if (this.PLAYABLE_CHARACTERS.includes(char.name)) {
+                    // Populate IDLE_FRAMES dynamically
+                    this.IDLE_FRAMES[char.name] = char.idleFrames || [];
+
+                    // Load the actual images
+                    this.IDLE_FRAMES[char.name].forEach((framePath: string, index: number) => {
+                        this.load.image(`${char.name}_select_idle_${index}`, framePath);
+                    });
+                }
+            });
+        }
 
         // Load character portraits
         Object.entries(this.PORTRAIT_PATHS).forEach(([name, path]) => {
             this.load.image(`portrait_${name}`, path);
-        });
-
-        // Load idle animation frames for playable characters
-        Object.entries(this.IDLE_FRAMES).forEach(([name, frames]) => {
-            frames.forEach((framePath, index) => {
-                this.load.image(`${name}_select_idle_${index}`, framePath);
-            });
         });
     }
 
@@ -120,17 +124,28 @@ export class CharacterSelectScene extends Phaser.Scene {
     }
 
     private createIdleAnimations() {
+        const manifest = this.cache.json.get('characterManifest');
+
         // Create animations for each playable character
         Object.entries(this.IDLE_FRAMES).forEach(([name, frames]) => {
             const frameKeys = frames.map((_, index) => ({
                 key: `${name}_select_idle_${index}`
             }));
 
+            // Get frameRate from manifest if available
+            let idleRate = 20;
+            if (manifest && manifest.characters) {
+                const charEntry = manifest.characters.find((c: any) => c.name === name);
+                if (charEntry && charEntry.frameRates && charEntry.frameRates.idle) {
+                    idleRate = charEntry.frameRates.idle;
+                }
+            }
+
             if (!this.anims.exists(`${name}_select_idle`)) {
                 this.anims.create({
                     key: `${name}_select_idle`,
                     frames: frameKeys,
-                    frameRate: 12,
+                    frameRate: idleRate,
                     repeat: -1
                 });
             }

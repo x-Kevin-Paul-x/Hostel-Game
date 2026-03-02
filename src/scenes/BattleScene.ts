@@ -151,43 +151,66 @@ export class BattleScene extends Phaser.Scene {
         if (manifest && manifest.characters) {
             manifest.characters.forEach((char: any) => {
                 const name = char.name;
-                // Walk (if frames exist)
-                makeAnim(name, 'walk', 24, -1);
+                // Create animations from manifest settings
+                if (char.frameRates) {
+                    const fr = char.frameRates;
+                    const jumpRate = fr.jump || 48;
+                    const airRate = Math.floor(jumpRate * 0.375);
 
-                // Idle (if frames exist)
-                makeAnim(name, 'idle', 12, -1);
+                    // Generic animations
+                    makeAnim(name, 'idle', fr.idle || 20, -1);
+                    makeAnim(name, 'jab', fr.jab || 60, 0);
+                    makeAnim(name, 'block', fr.block || 48, 0);
 
-                // Jab: use per-character jabFrameRate if provided, else default
-                const jabRate = char.jabFrameRate ? Number(char.jabFrameRate) : defaultJabFrameRate;
-                makeAnim(name, 'jab', jabRate, 0);
+                    if (name === 'Noel') {
+                        // Noel specific walk: transition (0-2) then loop (3-18)
+                        makeAnimFromRange(name, 'walk_start', 'walk', 0, 2, fr.walk || 24, 0);
+                        makeAnimFromRange(name, 'walk', 'walk', 3, 18, fr.walk || 24, -1);
 
-                // Special handling for Noel's two-part jab
+                        // Noel specific duck: start(0-7), loop(8-15), end(16-etc)
+                        makeAnimFromRange(name, 'duck_start', 'duck', 0, 7, fr.duck || 48, 0);
+                        makeAnimFromRange(name, 'duck', 'duck', 8, 15, fr.duck || 48, -1);
+                        const duckEndFrame = char.duckFrames ? char.duckFrames.length - 1 : 0;
+                        if (duckEndFrame >= 16) {
+                            makeAnimFromRange(name, 'duck_end', 'duck', 16, duckEndFrame, fr.duck || 48, 0);
+                        }
+
+                        makeAnimFromRange(name, 'jump_start', 'jump', 0, 9, jumpRate, 0);
+                        makeAnimFromRange(name, 'jump_air', 'jump', 10, 16, airRate, -1);
+                        makeAnimFromRange(name, 'jump_land', 'jump', 17, 19, jumpRate, 0);
+                    } else {
+                        makeAnim(name, 'walk', fr.walk || 24, -1);
+                        makeAnim(name, 'duck', fr.duck || 48, 0);
+
+                        makeAnimFromRange(name, 'jump_start', 'jump', 0, 7, jumpRate, 0);
+                        makeAnimFromRange(name, 'jump_air', 'jump', 8, 21, airRate, -1);
+                        makeAnimFromRange(name, 'jump_land', 'jump', 22, 34, jumpRate, 0);
+                    }
+                } else {
+                    // Fallback to defaults
+                    makeAnim(name, 'walk', 24, -1);
+                    makeAnim(name, 'idle', 20, -1);
+                    makeAnim(name, 'jab', defaultJabFrameRate, 0);
+                    makeAnim(name, 'duck', 48, 0);
+                    makeAnim(name, 'block', 48, 0);
+
+                    if (name === 'Noel') {
+                        makeAnimFromRange(name, 'jump_start', 'jump', 0, 9, 48, 0);
+                        makeAnimFromRange(name, 'jump_air', 'jump', 10, 16, 18, -1);
+                        makeAnimFromRange(name, 'jump_land', 'jump', 17, 19, 48, 0);
+                    } else {
+                        makeAnimFromRange(name, 'jump_start', 'jump', 0, 7, 48, 0);
+                        makeAnimFromRange(name, 'jump_air', 'jump', 8, 21, 18, -1);
+                        makeAnimFromRange(name, 'jump_land', 'jump', 22, 34, 48, 0);
+                    }
+                }
+
+                // Special handling for Noel's two-part jab chain (uses jabRate)
                 if (name === 'Noel') {
+                    const jabRate = char.frameRates?.jab || 60;
                     makeAnimFromRange(name, 'jab_1', 'jab', 0, 7, jabRate, 0);
                     makeAnimFromRange(name, 'jab_2', 'jab', 8, 15, jabRate, 0);
                 }
-
-                // Duck animation (play once, hold last frame)
-                makeAnim(name, 'duck', 48, 0);
-
-                // Jump animations - split into 3 phases
-                if (name === 'Noel') {
-                    // Noel specific jump phases (assuming 20 frames)
-                    makeAnimFromRange(name, 'jump_start', 'jump', 0, 9, 48, 0);
-                    makeAnimFromRange(name, 'jump_air', 'jump', 10, 16, 18, -1);
-                    makeAnimFromRange(name, 'jump_land', 'jump', 17, 19, 48, 0);
-                } else {
-                    // Default jump phases (mostly for Kevin's 35 frames)
-                    // Jump Start (rising): frames 0-7
-                    makeAnimFromRange(name, 'jump_start', 'jump', 0, 7, 48, 0);
-                    // Jump Air (airborne): frames 8-21, loop
-                    makeAnimFromRange(name, 'jump_air', 'jump', 8, 21, 18, -1);
-                    // Jump Land (landing): frames 22-34
-                    makeAnimFromRange(name, 'jump_land', 'jump', 22, 34, 48, 0);
-                }
-
-                // Block animation (play once, hold last frame)
-                makeAnim(name, 'block', 48, 0);
             });
         } else {
             // Fallback for Kevin only (older project state)
