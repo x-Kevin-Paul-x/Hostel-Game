@@ -4,8 +4,6 @@ import { SettingsManager } from '../utils/SettingsManager';
 export class TitleScene extends Phaser.Scene {
     private bgMusic!: Phaser.Sound.BaseSound;
     private menuVideo!: Phaser.GameObjects.Video;
-    private audioContext!: AudioContext;
-    private audioSource!: MediaElementAudioSourceNode;
 
     constructor() {
         super('TitleScene');
