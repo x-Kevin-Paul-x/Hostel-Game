@@ -5,7 +5,6 @@ import { BootScene } from './scenes/BootScene';
 import { BattleScene } from './scenes/BattleScene';
 import { SettingsScene } from './scenes/SettingsScene';
 import { CharacterSelectScene } from './scenes/CharacterSelectScene';
-import { BattleUIScene } from './scenes/BattleUIScene';
 
 const config: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
@@ -27,7 +26,7 @@ const config: Phaser.Types.Core.GameConfig = {
             debug: true,
         },
     },
-    scene: [TitleScene, CharacterSelectScene, BootScene, BattleScene, BattleUIScene, SettingsScene],
+    scene: [TitleScene, CharacterSelectScene, BootScene, BattleScene, SettingsScene],
 };
 
 new Phaser.Game(config);

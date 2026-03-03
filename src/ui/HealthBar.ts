@@ -12,16 +12,16 @@ export class HealthBar {
     private currentValue: number;
     private targetValue: number;
     private maxValue: number;
-
+    
     // Burst meter
     private burstValue: number = 0;
     private maxBurstValue: number = 100;
-
+    
     // Retro styling - enhanced
     private slantWidth: number = 25;
     private borderWidth: number = 3;
     private innerPadding: number = 3;
-
+    
     // Animation
     private pulseTimer: number = 0;
     private isLowHealth: boolean = false;
@@ -40,11 +40,11 @@ export class HealthBar {
         this.barContainer.add(this.graphics);
 
         this.draw();
-
+        
         // Add update loop for animations
         this.scene.events.on('update', this.update, this);
     }
-
+    
     private update() {
         this.pulseTimer += 0.1;
         if (this.isLowHealth) {
@@ -70,7 +70,7 @@ export class HealthBar {
             }
         });
     }
-
+    
     setBurstMeter(value: number) {
         this.burstValue = Phaser.Math.Clamp(value, 0, this.maxBurstValue);
         this.draw();
@@ -102,7 +102,7 @@ export class HealthBar {
         this.graphics.lineTo(3, h + 3);
         this.graphics.closePath();
         this.graphics.fillPath();
-
+        
         // Outer frame with slanted right edge (metallic dark)
         this.graphics.fillStyle(0x1a1a2e);
         this.graphics.beginPath();
@@ -139,7 +139,7 @@ export class HealthBar {
         this.graphics.lineTo(border, h - border);
         this.graphics.closePath();
         this.graphics.fillPath();
-
+        
         // Inner top gradient
         this.graphics.fillStyle(0x15152a, 0.8);
         this.graphics.fillRect(border, border, w - slant - border * 2, 6);
@@ -162,13 +162,13 @@ export class HealthBar {
         const healthPercent = this.targetValue / this.maxValue;
         if (healthPercent > 0) {
             const healthWidth = (w - border * 2 - pad * 2 - slant * 0.5) * healthPercent;
-
+            
             // Get color based on health with pulse effect for low health
             let mainColor = 0x00dd00;
             let lightColor = 0x66ff66;
             let darkColor = 0x006600;
             let glowColor = 0x00ff00;
-
+            
             if (healthPercent < 0.25) {
                 const pulse = this.isLowHealth ? 0.7 + Math.sin(this.pulseTimer * 3) * 0.3 : 1;
                 mainColor = Phaser.Display.Color.GetColor(
@@ -239,14 +239,14 @@ export class HealthBar {
         this.graphics.fillRect(0, h - 6, 6, 6);
         this.graphics.fillStyle(0xffffff, 0.6);
         this.graphics.fillRect(1, 1, 3, 3);
-
+        
         // Inner corner details
         this.graphics.fillStyle(0x4a4a6a);
         this.graphics.fillRect(6, 0, 2, 4);
         this.graphics.fillRect(0, 6, 4, 2);
-
+        
         // Draw burst meter below health bar
-        this.drawBurstMeter(w, h, border, true);
+        this.drawBurstMeter(w, h, slant, border, true);
     }
 
     private drawRightBar(w: number, h: number, slant: number, border: number, pad: number) {
@@ -259,7 +259,7 @@ export class HealthBar {
         this.graphics.lineTo(3, h + 3);
         this.graphics.closePath();
         this.graphics.fillPath();
-
+        
         // Draw from right to left (mirrored)
         this.graphics.fillStyle(0x1a1a2e);
         this.graphics.beginPath();
@@ -296,7 +296,7 @@ export class HealthBar {
         this.graphics.lineTo(-border, h - border);
         this.graphics.closePath();
         this.graphics.fillPath();
-
+        
         // Inner top gradient
         this.graphics.fillStyle(0x15152a, 0.8);
         this.graphics.fillRect(-w + slant + border, border, w - slant - border * 2, 6);
@@ -319,12 +319,12 @@ export class HealthBar {
         const healthPercent = this.targetValue / this.maxValue;
         if (healthPercent > 0) {
             const healthWidth = (w - border * 2 - pad * 2 - slant * 0.5) * healthPercent;
-
+            
             let mainColor = 0x00dd00;
             let lightColor = 0x66ff66;
             let darkColor = 0x006600;
             let glowColor = 0x00ff00;
-
+            
             if (healthPercent < 0.25) {
                 const pulse = this.isLowHealth ? 0.7 + Math.sin(this.pulseTimer * 3) * 0.3 : 1;
                 mainColor = Phaser.Display.Color.GetColor(
@@ -395,33 +395,33 @@ export class HealthBar {
         this.graphics.fillRect(-6, h - 6, 6, 6);
         this.graphics.fillStyle(0xffffff, 0.6);
         this.graphics.fillRect(-4, 1, 3, 3);
-
+        
         // Inner corner details
         this.graphics.fillStyle(0x4a4a6a);
         this.graphics.fillRect(-8, 0, 2, 4);
         this.graphics.fillRect(-4, 6, 4, 2);
-
+        
         // Draw burst meter below health bar
-        this.drawBurstMeter(w, h, border, false);
+        this.drawBurstMeter(w, h, slant, border, false);
     }
-
-    private drawBurstMeter(w: number, h: number, border: number, isLeft: boolean) {
+    
+    private drawBurstMeter(w: number, h: number, slant: number, border: number, isLeft: boolean) {
         const burstHeight = 10;
         const burstY = h + 6;
         const burstWidth = w * 0.6;
         const burstPercent = this.burstValue / this.maxBurstValue;
-
+        
         if (isLeft) {
             // Background
             this.graphics.fillStyle(0x0a0a1a);
             this.graphics.fillRoundedRect(border, burstY, burstWidth, burstHeight, 3);
             this.graphics.lineStyle(1, 0x3a3a5a);
             this.graphics.strokeRoundedRect(border, burstY, burstWidth, burstHeight, 3);
-
+            
             // Fill
             if (burstPercent > 0) {
                 const fillWidth = (burstWidth - 4) * burstPercent;
-
+                
                 // Determine color based on fill level
                 let burstColor = 0x4488ff;
                 let glowColor = 0x4488ff;
@@ -432,21 +432,21 @@ export class HealthBar {
                     burstColor = 0x66aaff;
                     glowColor = 0x66aaff;
                 }
-
+                
                 // Glow when full
                 if (burstPercent >= 1) {
                     this.graphics.fillStyle(glowColor, 0.3);
                     this.graphics.fillRoundedRect(border - 2, burstY - 2, burstWidth + 4, burstHeight + 4, 4);
                 }
-
+                
                 this.graphics.fillStyle(burstColor);
                 this.graphics.fillRoundedRect(border + 2, burstY + 2, fillWidth, burstHeight - 4, 2);
-
+                
                 // Highlight
                 this.graphics.fillStyle(0xffffff, 0.4);
                 this.graphics.fillRect(border + 3, burstY + 2, fillWidth - 2, 2);
             }
-
+            
             // Label
             this.graphics.fillStyle(0x6a6a8a);
         } else {
@@ -455,11 +455,11 @@ export class HealthBar {
             this.graphics.fillRoundedRect(-border - burstWidth, burstY, burstWidth, burstHeight, 3);
             this.graphics.lineStyle(1, 0x3a3a5a);
             this.graphics.strokeRoundedRect(-border - burstWidth, burstY, burstWidth, burstHeight, 3);
-
+            
             // Fill
             if (burstPercent > 0) {
                 const fillWidth = (burstWidth - 4) * burstPercent;
-
+                
                 let burstColor = 0x4488ff;
                 let glowColor = 0x4488ff;
                 if (burstPercent >= 1) {
@@ -469,22 +469,22 @@ export class HealthBar {
                     burstColor = 0x66aaff;
                     glowColor = 0x66aaff;
                 }
-
+                
                 if (burstPercent >= 1) {
                     this.graphics.fillStyle(glowColor, 0.3);
                     this.graphics.fillRoundedRect(-border - burstWidth - 2, burstY - 2, burstWidth + 4, burstHeight + 4, 4);
                 }
-
+                
                 this.graphics.fillStyle(burstColor);
                 this.graphics.fillRoundedRect(-border - 2 - fillWidth, burstY + 2, fillWidth, burstHeight - 4, 2);
-
+                
                 // Highlight
                 this.graphics.fillStyle(0xffffff, 0.4);
                 this.graphics.fillRect(-border - 1 - fillWidth, burstY + 2, fillWidth - 2, 2);
             }
         }
     }
-
+    
     destroy() {
         this.scene.events.off('update', this.update, this);
         this.barContainer.destroy();

@@ -6,11 +6,11 @@ export class CombatSystem {
     private fighters: Fighter[];
     private hitStopDuration: number = 80; // Freeze frames on hit
     private isInHitStop: boolean = false;
-
+    
     // Combo display
     private comboText?: Phaser.GameObjects.Text;
     private comboTimer: number = 0;
-
+    
     // Attack damage values with combo scaling
     private baseDamage: Record<string, number> = {
         jab: 5,
@@ -19,7 +19,7 @@ export class CombatSystem {
         air_punch: 8,
         air_kick: 12
     };
-
+    
     // Knockback values per attack - reduced vertical for grounded gameplay
     private knockback: Record<string, { x: number, y: number }> = {
         jab: { x: 130, y: -30 },
@@ -32,7 +32,7 @@ export class CombatSystem {
     constructor(scene: Phaser.Scene, fighters: Fighter[]) {
         this.scene = scene;
         this.fighters = fighters;
-
+        
         // Create combo text display
         this.comboText = scene.add.text(640, 200, '', {
             fontFamily: '"Press Start 2P", cursive',
@@ -45,51 +45,51 @@ export class CombatSystem {
 
     update(time: number) {
         if (this.isInHitStop) return;
-
+        
         const p1 = this.fighters[0];
         const p2 = this.fighters[1];
 
         // Check P1 attack hitting P2
-        if (p1.fState.current === 'ATTACK' || p1.fState.current === 'AIR_ATTACK') {
+        if (p1.currentState === 'ATTACK' || p1.currentState === 'AIR_ATTACK') {
             this.scene.physics.overlap(p1.attackBox, p2, () => {
                 this.handleHit(p1, p2, time);
             });
         }
 
         // Check P2 attack hitting P1
-        if (p2.fState.current === 'ATTACK' || p2.fState.current === 'AIR_ATTACK') {
+        if (p2.currentState === 'ATTACK' || p2.currentState === 'AIR_ATTACK') {
             this.scene.physics.overlap(p2.attackBox, p1, () => {
                 this.handleHit(p2, p1, time);
             });
         }
-
+        
         // Clash detection - both attacking and hitboxes overlap
-        if ((p1.fState.current === 'ATTACK' || p1.fState.current === 'AIR_ATTACK') &&
-            (p2.fState.current === 'ATTACK' || p2.fState.current === 'AIR_ATTACK')) {
+        if ((p1.currentState === 'ATTACK' || p1.currentState === 'AIR_ATTACK') && 
+            (p2.currentState === 'ATTACK' || p2.currentState === 'AIR_ATTACK')) {
             this.scene.physics.overlap(p1.attackBox, p2.attackBox, () => {
                 this.handleClash(p1, p2);
             });
         }
-
+        
         // Update combo display
         this.updateComboDisplay(time);
     }
-
+    
     private updateComboDisplay(time: number) {
         const p1 = this.fighters[0];
         const p2 = this.fighters[1];
-
+        
         // Show highest combo
-        const maxCombo = Math.max(p1.fState.comboCount, p2.fState.comboCount);
-
+        const maxCombo = Math.max(p1.comboCount, p2.comboCount);
+        
         if (maxCombo >= 2 && this.comboText) {
             this.comboText.setVisible(true);
             this.comboText.setText(`${maxCombo} HIT COMBO!`);
-
+            
             // Scale effect based on combo
             const scale = 1 + (maxCombo * 0.05);
             this.comboText.setScale(Math.min(scale, 1.5));
-
+            
             // Color based on combo size
             if (maxCombo >= 10) {
                 this.comboText.setColor('#ff0000');
@@ -98,10 +98,10 @@ export class CombatSystem {
             } else {
                 this.comboText.setColor('#ff6600');
             }
-
+            
             this.comboTimer = time + 1500;
         }
-
+        
         // Hide combo after timer
         if (time > this.comboTimer && this.comboText) {
             this.comboText.setVisible(false);
@@ -109,47 +109,47 @@ export class CombatSystem {
     }
 
     private handleHit(attacker: Fighter, defender: Fighter, time: number) {
-        if (defender.fState.current === 'KO' || defender.fState.invincible) return;
-        if (defender.fState.current === 'HITSTUN' && defender.fState.hitstunRemaining > 50) return; // Prevent rapid re-hits
+        if (defender.currentState === 'KO' || defender.invincible) return;
+        if (defender.currentState === 'HITSTUN' && defender.hitstunRemaining > 50) return; // Prevent rapid re-hits
 
-        const attackType = attacker.fState.lastAttackType || 'punch';
-
+        const attackType = attacker.lastAttackType || 'punch';
+        
         // Calculate base damage
         let damage = this.baseDamage[attackType] || 10;
-
+        
         // Apply stale move scaling (repeated attacks do less damage)
         const staleMultiplier = attacker.getStaleMoveMultiplier(attackType);
         damage = Math.ceil(damage * staleMultiplier);
         attacker.trackAttack(attackType);
-
+        
         // Combo damage scaling (damage reduces with combo length) - more aggressive scaling
         attacker.incrementCombo(time);
-        const comboScaling = Math.max(0.4, 1 - (attacker.fState.comboCount - 1) * 0.12);
+        const comboScaling = Math.max(0.4, 1 - (attacker.comboCount - 1) * 0.12);
         damage = Math.ceil(damage * comboScaling);
-
+        
         // Counter hit bonus (hit during opponent's attack startup)
-        if (defender.fState.current === 'ATTACK' || defender.fState.current === 'AIR_ATTACK') {
+        if (defender.currentState === 'ATTACK' || defender.currentState === 'AIR_ATTACK') {
             damage = Math.ceil(damage * 1.25);
             this.showCounterHit(defender.x, defender.y);
         }
-
+        
         // Calculate knockback direction - increased base knockback for more spacing
         const direction = attacker.x < defender.x ? 1 : -1;
         const kb = this.knockback[attackType] || { x: 150, y: -100 };
         // Increase knockback as combo goes on to eventually push them out
-        const comboKnockbackMultiplier = 1 + (attacker.fState.comboCount * 0.08);
+        const comboKnockbackMultiplier = 1 + (attacker.comboCount * 0.08);
         const knockbackX = kb.x * direction * comboKnockbackMultiplier;
         const knockbackY = kb.y;
-
+        
         // Apply damage with knockback
         defender.takeDamage(damage, time, knockbackX, knockbackY);
 
         // Hit Stop - freeze both fighters briefly
         this.applyHitStop(attacker, defender);
-
+        
         // Screen effects
         this.scene.cameras.main.shake(60 + damage * 2, 0.008 + damage * 0.001);
-
+        
         // Hit particles
         this.createHitParticles(defender.x, defender.y - 80);
 
@@ -158,49 +158,49 @@ export class CombatSystem {
             (attacker.attackBox.body as Phaser.Physics.Arcade.Body).enable = false;
         }
     }
-
+    
     private handleClash(p1: Fighter, p2: Fighter) {
         // Both fighters get pushed back
         const pushback = 200;
         p1.setVelocityX(-pushback);
         p2.setVelocityX(pushback);
-
+        
         // Small screen shake
         this.scene.cameras.main.shake(30, 0.005);
-
+        
         // Clash particles at midpoint
         const midX = (p1.x + p2.x) / 2;
         const midY = Math.min(p1.y, p2.y) - 80;
         this.createClashParticles(midX, midY);
-
+        
         // Disable both hitboxes
         if (p1.attackBox.body) (p1.attackBox.body as Phaser.Physics.Arcade.Body).enable = false;
         if (p2.attackBox.body) (p2.attackBox.body as Phaser.Physics.Arcade.Body).enable = false;
     }
-
+    
     private applyHitStop(attacker: Fighter, defender: Fighter) {
         this.isInHitStop = true;
-
+        
         // Store velocities
         const attackerVel = { x: attacker.body?.velocity.x || 0, y: attacker.body?.velocity.y || 0 };
         const defenderVel = { x: defender.body?.velocity.x || 0, y: defender.body?.velocity.y || 0 };
-
+        
         // Freeze
         attacker.setVelocity(0, 0);
         defender.setVelocity(0, 0);
-
+        
         // Resume after hit stop
         this.scene.time.delayedCall(this.hitStopDuration, () => {
             this.isInHitStop = false;
-            if (attacker.fState.current !== 'KO') {
+            if (attacker.currentState !== 'KO') {
                 attacker.setVelocity(attackerVel.x * 0.3, attackerVel.y);
             }
-            if (defender.fState.current !== 'KO') {
+            if (defender.currentState !== 'KO') {
                 defender.setVelocity(defenderVel.x, defenderVel.y);
             }
         });
     }
-
+    
     private showCounterHit(x: number, y: number) {
         const text = this.scene.add.text(x, y - 120, 'COUNTER!', {
             fontFamily: '"Press Start 2P", cursive',
@@ -209,7 +209,7 @@ export class CombatSystem {
             stroke: '#000',
             strokeThickness: 3
         }).setOrigin(0.5);
-
+        
         this.scene.tweens.add({
             targets: text,
             y: y - 180,
@@ -219,14 +219,14 @@ export class CombatSystem {
             onComplete: () => text.destroy()
         });
     }
-
+    
     private createHitParticles(x: number, y: number) {
         // Create simple particle effect
         for (let i = 0; i < 8; i++) {
             const particle = this.scene.add.circle(x, y, 6, 0xffff00);
             const angle = (i / 8) * Math.PI * 2;
             const speed = 150 + Math.random() * 100;
-
+            
             this.scene.tweens.add({
                 targets: particle,
                 x: x + Math.cos(angle) * speed * 0.5,
@@ -240,14 +240,14 @@ export class CombatSystem {
             });
         }
     }
-
+    
     private createClashParticles(x: number, y: number) {
         // Spark effect for clash
         for (let i = 0; i < 12; i++) {
             const particle = this.scene.add.star(x, y, 4, 4, 8, 0xffffff);
             const angle = (i / 12) * Math.PI * 2;
             const speed = 200;
-
+            
             this.scene.tweens.add({
                 targets: particle,
                 x: x + Math.cos(angle) * speed * 0.3,

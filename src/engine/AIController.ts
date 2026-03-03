@@ -47,7 +47,12 @@ export class AIController {
     private mixupChoice: number = 0;
     private frameAdvantage: boolean = false;
 
+    // Pattern recognition (track player habits)
+    private playerBlocksHigh: number = 0;
+    private playerBlocksLow: number = 0;
+    private playerJumpsOften: boolean = false;
     private playerAttackFrequency: number = 0;
+    private playerDashForward: number = 0;
 
     constructor(me: Fighter, target: Fighter, difficulty: number = 0.85) {
         this.me = me;
@@ -66,7 +71,7 @@ export class AIController {
 
         // Process combo if in one
         if (this.inCombo && time < this.comboTimer) {
-            return this.executeCombo();
+            return this.executeCombo(time);
         }
 
         // Throttle decision making for more human-like behavior
@@ -84,18 +89,18 @@ export class AIController {
         this.currentInput = this.getEmptyInput();
 
         const distance = this.getDistance();
-        const targetIsAttacking = this.target.fState.current === 'ATTACK' || this.target.fState.current === 'AIR_ATTACK';
-        const targetIsVulnerable = this.target.fState.current === 'HITSTUN' || this.target.fState.current === 'STUNNED';
-        const targetIsRecovering = this.target.fState.current === 'LANDING';
-        const iAmAirborne = this.me.fState.isAirborne;
-        const targetIsAirborne = this.target.fState.isAirborne;
-        const meBlocking = this.me.fState.isBlocking;
+        const targetIsAttacking = this.target.currentState === 'ATTACK' || this.target.currentState === 'AIR_ATTACK';
+        const targetIsVulnerable = this.target.currentState === 'HITSTUN' || this.target.currentState === 'STUNNED';
+        const targetIsRecovering = this.target.currentState === 'LANDING';
+        const iAmAirborne = this.me.isAirborne;
+        const targetIsAirborne = this.target.isAirborne;
+        const meBlocking = this.me.isBlocking;
 
         // Detect target attack start for reactions
         if (targetIsAttacking && this.lastTargetState !== 'ATTACK' && this.lastTargetState !== 'AIR_ATTACK') {
             this.targetAttackStartTime = time;
         }
-        this.lastTargetState = this.target.fState.current;
+        this.lastTargetState = this.target.currentState;
 
         // Execute behavior based on AI state
         switch (this.aiState) {
@@ -115,15 +120,15 @@ export class AIController {
                 this.executePressure(distance, time, meBlocking);
                 break;
             case 'SETUP':
-                this.executeSetup(distance);
+                this.executeSetup(distance, time);
                 break;
             default:
-                this.executeNeutral(distance, targetIsAttacking, targetIsAirborne);
+                this.executeNeutral(distance, time, targetIsAttacking, targetIsAirborne);
         }
 
         // Air behavior override
         if (iAmAirborne) {
-            this.handleAirBehavior(distance);
+            this.handleAirBehavior(distance, time);
         }
 
         // Anti-air reaction - improved timing
@@ -161,7 +166,7 @@ export class AIController {
         this.lastTargetX = currentTargetX;
 
         // Track attack frequency
-        if (this.target.fState.current === 'ATTACK') {
+        if (this.target.currentState === 'ATTACK') {
             this.playerAttackFrequency++;
         }
 
@@ -169,9 +174,15 @@ export class AIController {
         if (time % 1000 < 20) {
             this.playerAttackFrequency = Math.max(0, this.playerAttackFrequency - 1);
         }
+
+        // Track jumping habits
+        if (this.target.isAirborne && !this.target.currentState.includes('HITSTUN')) {
+            this.playerJumpsOften = true;
+        }
     }
+
     private shouldReactBlock(time: number): boolean {
-        const targetIsAttacking = this.target.fState.current === 'ATTACK' || this.target.fState.current === 'AIR_ATTACK';
+        const targetIsAttacking = this.target.currentState === 'ATTACK' || this.target.currentState === 'AIR_ATTACK';
         const distance = this.getDistance();
 
         if (!targetIsAttacking || distance > 120) return false;
@@ -187,12 +198,12 @@ export class AIController {
     private updateAIState(time: number) {
         if (time < this.stateChangeCooldown) return;
 
-        const hpPercent = this.me.fState.hp / this.me.fState.maxHp;
-        const targetHpPercent = this.target.fState.hp / this.target.fState.maxHp;
+        const hpPercent = this.me.hp / this.me.maxHp;
+        const targetHpPercent = this.target.hp / this.target.maxHp;
         const distance = this.getDistance();
 
         // Priority state transitions
-        if (this.target.fState.current === 'HITSTUN' || this.target.fState.current === 'STUNNED') {
+        if (this.target.currentState === 'HITSTUN' || this.target.currentState === 'STUNNED') {
             this.aiState = 'PUNISH';
             this.consecutiveAttacks = 0;
             this.stateChangeCooldown = time + 300;
@@ -311,12 +322,12 @@ export class AIController {
         }
 
         // Counter-attack after successful block (frame advantage)
-        if (!targetIsAttacking && this.me.fState.isBlocking && distance < this.optimalRange) {
+        if (!targetIsAttacking && this.me.isBlocking && distance < this.optimalRange) {
             this.frameAdvantage = true;
         }
 
         // Occasional counter-poke
-        if (!targetIsAttacking && !this.target.fState.isAirborne && distance < this.pokeRange) {
+        if (!targetIsAttacking && !this.target.isAirborne && distance < this.pokeRange) {
             if (Math.random() < 0.15 * this.difficulty) {
                 this.currentInput.jab = true;
                 this.consecutiveAttacks++;
@@ -391,7 +402,7 @@ export class AIController {
         }
     }
 
-    private executeSetup(distance: number) {
+    private executeSetup(distance: number, time: number) {
         // Positioning and waiting for openings
         const idealDistance = this.optimalRange * 1.1;
 
@@ -416,7 +427,7 @@ export class AIController {
         }
 
         // Jump over projectiles / read opponent (if they're idle too long)
-        if (this.target.fState.current === 'IDLE' && Math.random() < 0.02) {
+        if (this.target.currentState === 'IDLE' && Math.random() < 0.02) {
             this.currentInput.jump = true;
             this.moveTowardsTarget();
         }
@@ -443,7 +454,7 @@ export class AIController {
             this.currentInput.right = false;
 
             // Try to jump out when safe
-            if (!this.target.fState.isAirborne && distance > 80) {
+            if (!this.target.isAirborne && distance > 80) {
                 this.currentInput.jump = true;
                 this.currentInput.block = false;
             }
@@ -456,7 +467,7 @@ export class AIController {
         }
     }
 
-    private executeNeutral(distance: number, targetIsAttacking: boolean, targetIsAirborne: boolean) {
+    private executeNeutral(distance: number, time: number, targetIsAttacking: boolean, targetIsAirborne: boolean) {
         // Smart footsies - maintain optimal spacing
         const targetDistance = this.optimalRange * 1.2;
 
@@ -512,7 +523,7 @@ export class AIController {
         }
     }
 
-    private handleAirBehavior(distance: number) {
+    private handleAirBehavior(distance: number, time: number) {
         // Determine if this is an offensive or defensive jump
         const myVelocityY = this.me.body ? (this.me.body as Phaser.Physics.Arcade.Body).velocity.y : 0;
 
@@ -546,7 +557,7 @@ export class AIController {
         this.comboTimer = time + sequence.length * 180; // rough combo duration
     }
 
-    private executeCombo(): InputMap {
+    private executeCombo(time: number): InputMap {
         this.currentInput = this.getEmptyInput();
 
         if (this.comboSequence.length === 0) {
