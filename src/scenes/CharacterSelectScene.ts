@@ -25,12 +25,13 @@ export class CharacterSelectScene extends Phaser.Scene {
     private selectingForAI: boolean = false; // When true in VS AI mode, P1 is selecting for AI
 
     // Playable characters (those with full implementation)
-    private readonly PLAYABLE_CHARACTERS = ['Kevin', 'Noel'];
+    private readonly PLAYABLE_CHARACTERS = ['Kevin', 'Noel', 'Ali'];
 
     // Portrait paths for playable characters
     private readonly PORTRAIT_PATHS: { [key: string]: string } = {
         'Kevin': '/Assets/Character/Kevin/Portrait.png',
-        'Noel': '/Assets/Character/Noel/Portrait.jpeg'
+        'Noel': '/Assets/Character/Noel/Portrait.jpeg',
+        'Ali': '/Assets/Character/Ali/ali .jpg'
     };
 
     // Idle frame paths for animations

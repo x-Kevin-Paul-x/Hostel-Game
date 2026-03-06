@@ -40,7 +40,20 @@
       "name": "Ali",
       "path": "Assets/Character/Ali",
       "walkFrames": [],
-      "idleFrames": [],
+      "idleFrames": [
+        "Assets/Character/Ali/Idle/sprite_0000.png",
+        "Assets/Character/Ali/Idle/sprite_0001.png",
+        "Assets/Character/Ali/Idle/sprite_0002.png",
+        "Assets/Character/Ali/Idle/sprite_0003.png",
+        "Assets/Character/Ali/Idle/sprite_0004.png",
+        "Assets/Character/Ali/Idle/sprite_0005.png",
+        "Assets/Character/Ali/Idle/sprite_0006.png",
+        "Assets/Character/Ali/Idle/sprite_0007.png",
+        "Assets/Character/Ali/Idle/sprite_0008.png",
+        "Assets/Character/Ali/Idle/sprite_0009.png",
+        "Assets/Character/Ali/Idle/sprite_0010.png",
+        "Assets/Character/Ali/Idle/sprite_0011.png"
+      ],
       "jabFrames": [],
       "duckFrames": [],
       "jumpFrames": [],
@@ -307,24 +320,6 @@
       }
     },
     {
-      "name": "Kevin_2",
-      "path": "Assets/Character/Kevin_2",
-      "walkFrames": [],
-      "idleFrames": [],
-      "jabFrames": [],
-      "duckFrames": [],
-      "jumpFrames": [],
-      "blockFrames": [],
-      "frameRates": {
-        "walk": 24,
-        "idle": 20,
-        "jab": 60,
-        "duck": 48,
-        "jump": 48,
-        "block": 48
-      }
-    },
-    {
       "name": "Laurren",
       "path": "Assets/Character/Laurren",
       "walkFrames": [],
@@ -491,24 +486,6 @@
       "frameRates": {
         "walk": 24,
         "idle": 21,
-        "jab": 60,
-        "duck": 48,
-        "jump": 48,
-        "block": 48
-      }
-    },
-    {
-      "name": "Rutvik",
-      "path": "Assets/Character/Rutvik",
-      "walkFrames": [],
-      "idleFrames": [],
-      "jabFrames": [],
-      "duckFrames": [],
-      "jumpFrames": [],
-      "blockFrames": [],
-      "frameRates": {
-        "walk": 24,
-        "idle": 20,
         "jab": 60,
         "duck": 48,
         "jump": 48,
