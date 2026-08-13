@@ -320,6 +320,24 @@
       }
     },
     {
+      "name": "Kevin_2",
+      "path": "Assets/Character/Kevin_2",
+      "walkFrames": [],
+      "idleFrames": [],
+      "jabFrames": [],
+      "duckFrames": [],
+      "jumpFrames": [],
+      "blockFrames": [],
+      "frameRates": {
+        "walk": 24,
+        "idle": 20,
+        "jab": 60,
+        "duck": 48,
+        "jump": 48,
+        "block": 48
+      }
+    },
+    {
       "name": "Laurren",
       "path": "Assets/Character/Laurren",
       "walkFrames": [],
@@ -486,6 +504,24 @@
       "frameRates": {
         "walk": 24,
         "idle": 21,
+        "jab": 60,
+        "duck": 48,
+        "jump": 48,
+        "block": 48
+      }
+    },
+    {
+      "name": "Rutvik",
+      "path": "Assets/Character/Rutvik",
+      "walkFrames": [],
+      "idleFrames": [],
+      "jabFrames": [],
+      "duckFrames": [],
+      "jumpFrames": [],
+      "blockFrames": [],
+      "frameRates": {
+        "walk": 24,
+        "idle": 20,
         "jab": 60,
         "duck": 48,
         "jump": 48,
